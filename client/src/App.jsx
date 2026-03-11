@@ -1,0 +1,55 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { useAuth } from "./context/AuthContext";
+import CompanyDashboard from "./pages/CompanyDashboard";
+import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import SeekerDashboard from "./pages/SeekerDashboard";
+
+const DashboardRedirect = () => {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={user.userType === "company" ? "/company" : "/seeker"} replace />;
+};
+
+const App = () => (
+  <div className="min-h-screen">
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/seeker"
+        element={
+          <ProtectedRoute requiredRole="seeker">
+            <SeekerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/company"
+        element={
+          <ProtectedRoute requiredRole="company">
+            <CompanyDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  </div>
+);
+
+export default App;

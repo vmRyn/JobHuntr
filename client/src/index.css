@@ -1,0 +1,143 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-0: #050811;
+  --bg-1: #0b1529;
+  --bg-2: #15213c;
+  --ink: #f4f8ff;
+  --muted: #afbdd8;
+  --line: rgba(166, 187, 222, 0.34);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Manrope", sans-serif;
+  line-height: 1.5;
+  color: var(--ink);
+  color-scheme: dark;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.2), transparent 30%),
+    radial-gradient(circle at 88% 0%, rgba(16, 185, 129, 0.2), transparent 36%),
+    linear-gradient(168deg, var(--bg-0) 0%, var(--bg-1) 46%, var(--bg-2) 100%);
+  background-attachment: fixed;
+}
+
+a {
+  color: rgb(125 211 252);
+}
+
+a:hover {
+  color: rgb(186 230 253);
+}
+
+::selection {
+  color: rgb(240 249 255);
+  background: rgb(14 116 144 / 0.65);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.5) 0.4px, transparent 0.4px);
+  background-size: 3px 3px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgb(125 211 252 / 0.75);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .page-frame {
+    @apply mx-auto w-full max-w-5xl px-4 pb-8 pt-5 md:px-6 md:pt-8;
+  }
+
+  .surface-card {
+    @apply rounded-3xl border border-white/20 bg-slate-900/80 backdrop-blur-xl;
+    box-shadow: 0 24px 48px -26px rgba(0, 0, 0, 0.78);
+  }
+
+  .soft-divider {
+    @apply border-t border-white/10;
+  }
+
+  .label-text {
+    @apply text-xs font-semibold uppercase text-slate-300;
+    letter-spacing: 0.16em;
+  }
+
+  .field-control {
+    @apply w-full rounded-2xl border border-white/20 bg-slate-900/70 px-4 py-3 text-sm leading-6 text-slate-50 outline-none transition;
+  }
+
+  .field-control::placeholder {
+    color: rgb(148 163 184);
+  }
+
+  .field-control:hover {
+    border-color: rgb(255 255 255 / 0.3);
+  }
+
+  .field-control:focus {
+    border-color: rgb(56 189 248 / 0.75);
+    box-shadow: 0 0 0 2px rgb(56 189 248 / 0.2);
+  }
+
+  .field-control:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  select.field-control option {
+    background: rgb(15 23 42);
+    color: rgb(241 245 249);
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100;
+  }
+
+  .tab-trigger {
+    @apply rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300 transition;
+  }
+
+  .tab-trigger:hover {
+    @apply bg-white/10 text-slate-100;
+  }
+
+  .tab-trigger-active {
+    color: rgb(240 249 255);
+    background-color: rgb(14 165 233 / 0.28);
+    box-shadow: inset 0 0 0 1px rgb(56 189 248 / 0.5);
+  }
+
+  .empty-state {
+    @apply rounded-2xl border border-dashed border-white/20 bg-slate-900/60 p-4 text-sm text-slate-300;
+  }
+}

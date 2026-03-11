@@ -1,0 +1,674 @@
+import { useEffect, useMemo, useState } from "react";
+import api from "../api/client";
+import DashboardShell from "../components/DashboardShell";
+import CandidateProfileSheet from "../components/CandidateProfileSheet";
+import CandidateCardContent from "../components/CandidateCardContent";
+import ChatWindow from "../components/ChatWindow";
+import LoadingSpinner from "../components/LoadingSpinner";
+import MatchList from "../components/MatchList";
+import SwipeCard from "../components/SwipeCard";
+import jobIndustryOptions from "../data/jobIndustryOptions";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import FileUploadField from "../components/ui/FileUploadField";
+import InputField from "../components/ui/InputField";
+import ModalSheet from "../components/ui/ModalSheet";
+import SelectField from "../components/ui/SelectField";
+import {
+  DiscoverIcon,
+  JobsIcon,
+  MatchesIcon,
+  MessagesIcon,
+  ProfileIcon
+} from "../components/ui/NavIcons";
+import { useAuth } from "../context/AuthContext";
+
+const defaultJobForm = {
+  id: "",
+  title: "",
+  description: "",
+  salary: "",
+  industry: "",
+  location: "",
+  postcode: "",
+  requiredSkills: ""
+};
+
+const createInitialProfile = (user) => ({
+  companyName: user?.companyProfile?.companyName || "",
+  description: user?.companyProfile?.description || "",
+  industry: user?.companyProfile?.industry || "",
+  logo: user?.companyProfile?.logo || ""
+});
+
+const CompanyDashboard = () => {
+  const { user, setUser } = useAuth();
+  const [activeTab, setActiveTab] = useState("discover");
+  const [jobs, setJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState("");
+  const [candidates, setCandidates] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
+  const [candidateDetailsOpen, setCandidateDetailsOpen] = useState(false);
+  const [matchedProfileOpen, setMatchedProfileOpen] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [jobForm, setJobForm] = useState(defaultJobForm);
+  const [profileForm, setProfileForm] = useState(createInitialProfile(user));
+  const [profileFiles, setProfileFiles] = useState({ logo: null });
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedJob = useMemo(
+    () => jobs.find((job) => job._id === selectedJobId) || null,
+    [jobs, selectedJobId]
+  );
+
+  const activeCandidate = candidates[0] || null;
+  const matchedCandidateProfile = selectedMatch?.seeker?.seekerProfile || {};
+
+  const tabs = useMemo(
+    () => [
+      { id: "discover", label: "Discover", icon: <DiscoverIcon /> },
+      { id: "jobs", label: "Jobs", icon: <JobsIcon /> },
+      { id: "matches", label: "Matches", icon: <MatchesIcon /> },
+      { id: "messages", label: "Messages", icon: <MessagesIcon /> },
+      { id: "profile", label: "Profile", icon: <ProfileIcon /> }
+    ],
+    []
+  );
+
+  useEffect(() => {
+    setProfileForm(createInitialProfile(user));
+    setProfileFiles({ logo: null });
+  }, [user]);
+
+  const loadJobs = async () => {
+    setError("");
+
+    try {
+      const { data } = await api.get("/jobs/company");
+      setJobs(data);
+      setSelectedJobId((prev) => {
+        if (prev && data.some((job) => job._id === prev)) {
+          return prev;
+        }
+        return data[0]?._id || "";
+      });
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to load jobs");
+    }
+  };
+
+  const loadMatches = async () => {
+    try {
+      const { data } = await api.get("/matches");
+      setMatches(data);
+      setSelectedMatch((prev) => {
+        if (!prev && data.length) return data[0];
+        if (prev && data.some((match) => match._id === prev._id)) return prev;
+        return data[0] || null;
+      });
+    } catch (requestError) {
+      setNotice(requestError.response?.data?.message || "Could not refresh matches");
+    }
+  };
+
+  const loadCandidates = async (jobId) => {
+    if (!jobId) {
+      setCandidates([]);
+      return;
+    }
+
+    setLoadingCandidates(true);
+    setError("");
+
+    try {
+      const { data } = await api.get("/profile/candidates", { params: { jobId } });
+      setCandidates(data);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to load candidates");
+    } finally {
+      setLoadingCandidates(false);
+    }
+  };
+
+  useEffect(() => {
+    loadJobs();
+    loadMatches();
+  }, []);
+
+  useEffect(() => {
+    if (selectedJobId) {
+      loadCandidates(selectedJobId);
+    }
+  }, [selectedJobId]);
+
+  const resetForm = () => setJobForm(defaultJobForm);
+
+  const openCreateJobModal = () => {
+    resetForm();
+    setJobModalOpen(true);
+  };
+
+  const handleJobFormChange = (event) => {
+    const { name, value } = event.target;
+    setJobForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmitJob = async (event) => {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    const payload = {
+      title: jobForm.title,
+      description: jobForm.description,
+      salary: jobForm.salary,
+      industry: jobForm.industry,
+      location: jobForm.location,
+      postcode: jobForm.postcode,
+      requiredSkills: jobForm.requiredSkills
+    };
+
+    try {
+      if (jobForm.id) {
+        await api.put(`/jobs/${jobForm.id}`, payload);
+        setNotice("Job updated");
+      } else {
+        await api.post("/jobs", payload);
+        setNotice("Job created");
+      }
+
+      resetForm();
+      await loadJobs();
+      await loadCandidates(selectedJobId);
+      setJobModalOpen(false);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to save job");
+    }
+  };
+
+  const handleEditJob = (job) => {
+    setJobForm({
+      id: job._id,
+      title: job.title,
+      description: job.description,
+      salary: job.salary,
+      industry: job.industry || "",
+      location: job.location,
+      postcode: job.postcode || "",
+      requiredSkills: (job.requiredSkills || []).join(", ")
+    });
+    setJobModalOpen(true);
+  };
+
+  const handleDeleteJob = async (jobId) => {
+    if (!window.confirm("Delete this job listing?")) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.delete(`/jobs/${jobId}`);
+      setNotice("Job deleted");
+
+      await loadJobs();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to delete job");
+    }
+  };
+
+  const handleCandidateSwipe = async (direction) => {
+    const candidate = activeCandidate;
+    if (!candidate || !selectedJobId) return;
+
+    setError("");
+    setNotice("");
+
+    try {
+      const { data } = await api.post(`/swipes/candidate/${candidate._id}`, {
+        direction,
+        jobId: selectedJobId
+      });
+
+      setCandidates((prev) => prev.slice(1));
+
+      if (data.matched) {
+        setNotice("Match created. Open chat on the right.");
+        loadMatches();
+      }
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to submit swipe");
+    }
+  };
+
+  const handleProfileChange = (event) => {
+    const { name, value } = event.target;
+    setProfileForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleProfileFileChange = (file) => {
+    setProfileFiles({ logo: file });
+  };
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const formData = new FormData();
+
+      formData.append("companyName", profileForm.companyName);
+      formData.append("description", profileForm.description);
+      formData.append("industry", profileForm.industry);
+
+      if (profileFiles.logo) {
+        formData.append("logo", profileFiles.logo);
+      }
+
+      const { data } = await api.put("/profile/me", formData);
+      setUser(data);
+      setNotice("Profile updated");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const renderDiscover = () => {
+    if (!jobs.length) {
+      return (
+        <Card className="space-y-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discover</p>
+          <h2 className="font-display text-2xl text-slate-50">No jobs yet</h2>
+          <p className="text-sm text-slate-300">
+            Add a job listing first, then return to Discover to swipe candidates.
+          </p>
+          <Button onClick={() => setActiveTab("jobs")}>Create first job</Button>
+        </Card>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        <Card className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discover</p>
+            <h2 className="font-display text-2xl text-slate-50">Swipe candidates</h2>
+            <p className="text-sm text-slate-300">Select a role, then swipe right to shortlist.</p>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {jobs.map((job) => (
+              <button
+                key={job._id}
+                type="button"
+                onClick={() => setSelectedJobId(job._id)}
+                className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  selectedJobId === job._id
+                    ? "border-brand/60 bg-brand/15 text-brand"
+                    : "border-white/15 bg-white/5 text-slate-300 hover:border-brand/40"
+                }`}
+              >
+                {job.title}
+              </button>
+            ))}
+          </div>
+
+          {selectedJob && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
+              Active role: <span className="font-semibold text-slate-100">{selectedJob.title}</span>
+            </div>
+          )}
+
+          {loadingCandidates && <LoadingSpinner label="Loading candidates" />}
+
+          {!loadingCandidates && activeCandidate && (
+            <>
+              <SwipeCard itemKey={activeCandidate._id} onSwipe={handleCandidateSwipe}>
+                <CandidateCardContent candidate={activeCandidate} />
+              </SwipeCard>
+              <div className="grid grid-cols-3 gap-2">
+                <Button variant="secondary" onClick={() => handleCandidateSwipe("left")}>
+                  Pass
+                </Button>
+                <Button variant="ghost" onClick={() => setCandidateDetailsOpen(true)}>
+                  Details
+                </Button>
+                <Button onClick={() => handleCandidateSwipe("right")}>Like</Button>
+              </div>
+            </>
+          )}
+
+          {!loadingCandidates && !activeCandidate && (
+            <div className="empty-state p-5">
+              No candidates available for this role right now.
+            </div>
+          )}
+        </Card>
+
+        <ModalSheet
+          open={candidateDetailsOpen && Boolean(activeCandidate)}
+          title={activeCandidate?.seekerProfile?.name || "Candidate details"}
+          subtitle={selectedJob?.title || ""}
+          onClose={() => setCandidateDetailsOpen(false)}
+        >
+          {activeCandidate && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-300">
+                {activeCandidate.seekerProfile?.bio || "No bio provided by this candidate."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(activeCandidate.seekerProfile?.skills || []).map((skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </ModalSheet>
+      </div>
+    );
+  };
+
+  const renderJobs = () => (
+    <div className="space-y-3">
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Jobs</p>
+            <h2 className="font-display text-2xl text-slate-50">Manage listings</h2>
+          </div>
+          <Button onClick={openCreateJobModal}>New job</Button>
+        </div>
+
+        {!jobs.length && (
+          <div className="empty-state p-5">
+            No listings yet. Create one to start swiping candidates.
+          </div>
+        )}
+
+        <div className="space-y-2.5">
+          {jobs.map((job) => (
+            <div key={job._id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-base font-semibold text-slate-100">{job.title}</p>
+                  <p className="text-xs text-slate-300">{job.location} • {job.postcode || "No postcode"}</p>
+                </div>
+                {selectedJobId === job._id && <span className="chip">Active</span>}
+              </div>
+
+              <div className="mb-3 flex flex-wrap gap-2">
+                {job.industry && <span className="chip">{job.industry}</span>}
+                {job.salary && <span className="chip">{job.salary}</span>}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setSelectedJobId(job._id)}>
+                  Use for swipe
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => handleEditJob(job)}>
+                  Edit
+                </Button>
+                <Button variant="danger" size="sm" onClick={() => handleDeleteJob(job._id)}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <ModalSheet
+        open={jobModalOpen}
+        title={jobForm.id ? "Edit job" : "Create job"}
+        subtitle="Keep your listing concise and swipe-friendly."
+        onClose={() => {
+          setJobModalOpen(false);
+          resetForm();
+        }}
+      >
+        <form onSubmit={handleSubmitJob} className="grid gap-3 md:grid-cols-2">
+          <InputField
+            className="md:col-span-2"
+            label="Title"
+            name="title"
+            value={jobForm.title}
+            onChange={handleJobFormChange}
+            placeholder="Frontend Engineer"
+            required
+          />
+          <SelectField
+            label="Industry"
+            name="industry"
+            value={jobForm.industry}
+            onChange={handleJobFormChange}
+            options={jobIndustryOptions}
+            placeholder="Select industry"
+            required
+          />
+          <InputField
+            label="Location"
+            name="location"
+            value={jobForm.location}
+            onChange={handleJobFormChange}
+            placeholder="City or region"
+            required
+          />
+          <InputField
+            label="Postcode"
+            name="postcode"
+            value={jobForm.postcode}
+            onChange={handleJobFormChange}
+            placeholder="EC1A 1BB"
+            required
+          />
+          <InputField
+            label="Salary"
+            name="salary"
+            value={jobForm.salary}
+            onChange={handleJobFormChange}
+            placeholder="$120k-$150k"
+          />
+          <InputField
+            className="md:col-span-2"
+            label="Required skills"
+            name="requiredSkills"
+            value={jobForm.requiredSkills}
+            onChange={handleJobFormChange}
+            placeholder="React, TypeScript, GraphQL"
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Description"
+            name="description"
+            value={jobForm.description}
+            onChange={handleJobFormChange}
+            placeholder="Describe the role"
+            required
+          />
+
+          <Button className="md:col-span-2" type="submit">
+            {jobForm.id ? "Update job" : "Create job"}
+          </Button>
+        </form>
+      </ModalSheet>
+    </div>
+  );
+
+  const renderMatches = () => (
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Matches</p>
+          <h2 className="font-display text-2xl text-slate-50">Mutual candidates</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!selectedMatch}
+            onClick={() => setMatchedProfileOpen(true)}
+          >
+            View profile
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!selectedMatch}
+            onClick={() => setActiveTab("messages")}
+          >
+            Open chat
+          </Button>
+        </div>
+      </div>
+
+      <MatchList
+        matches={matches}
+        selectedMatchId={selectedMatch?._id}
+        onSelect={setSelectedMatch}
+        userType={user.userType}
+      />
+
+      {selectedMatch && (
+        <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4">
+          <p className="text-base font-semibold text-slate-100">
+            {matchedCandidateProfile.name || "Candidate"}
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            {matchedCandidateProfile.location || "Location not set"}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {matchedCandidateProfile.industryField && <span className="chip">{matchedCandidateProfile.industryField}</span>}
+            {selectedMatch.job?.title && <span className="chip">Matched for {selectedMatch.job.title}</span>}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+
+  const renderMessages = () => (
+    <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
+      <Card className="space-y-3">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Conversations</p>
+        <MatchList
+          matches={matches}
+          selectedMatchId={selectedMatch?._id}
+          onSelect={setSelectedMatch}
+          userType={user.userType}
+        />
+      </Card>
+
+      <Card>
+        <ChatWindow
+          selectedMatch={selectedMatch}
+          currentUser={user}
+          headerAction={
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!selectedMatch}
+              onClick={() => setMatchedProfileOpen(true)}
+            >
+              View Profile
+            </Button>
+          }
+        />
+      </Card>
+    </div>
+  );
+
+  const renderProfile = () => (
+    <Card className="space-y-5">
+      <div>
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
+        <h2 className="font-display text-2xl text-slate-50">Company details</h2>
+      </div>
+
+      <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
+        <InputField
+          label="Company name"
+          name="companyName"
+          value={profileForm.companyName}
+          onChange={handleProfileChange}
+          placeholder="FutureLabs"
+          required
+        />
+        <InputField
+          label="Industry"
+          name="industry"
+          value={profileForm.industry}
+          onChange={handleProfileChange}
+          placeholder="Software"
+        />
+        <FileUploadField
+          className="md:col-span-2"
+          label="Company logo"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          buttonLabel="Company logo"
+          helpText="Upload JPG, PNG, WEBP, or GIF"
+          file={profileFiles.logo}
+          onFileChange={handleProfileFileChange}
+          existingUrl={profileForm.logo}
+          imagePreview
+        />
+        <InputField
+          className="md:col-span-2"
+          as="textarea"
+          label="Description"
+          name="description"
+          value={profileForm.description}
+          onChange={handleProfileChange}
+          placeholder="What your company is building"
+        />
+
+        <Button className="md:col-span-2" type="submit" disabled={savingProfile}>
+          {savingProfile ? "Saving..." : "Save profile"}
+        </Button>
+      </form>
+    </Card>
+  );
+
+  const contentByTab = {
+    discover: renderDiscover(),
+    jobs: renderJobs(),
+    matches: renderMatches(),
+    messages: renderMessages(),
+    profile: renderProfile()
+  };
+
+  return (
+    <DashboardShell
+      title="Company Mode"
+      subtitle="Keep the workflow focused: list jobs, swipe talent, and message matches."
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      notice={notice}
+      error={error}
+    >
+      {contentByTab[activeTab]}
+
+      <CandidateProfileSheet
+        open={matchedProfileOpen}
+        onClose={() => setMatchedProfileOpen(false)}
+        match={selectedMatch}
+      />
+    </DashboardShell>
+  );
+};
+
+export default CompanyDashboard;
