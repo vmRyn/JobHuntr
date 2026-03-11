@@ -6,6 +6,12 @@ JobHuntr is a swipe-first hiring platform inspired by Tinder-style interactions.
 - Companies swipe through candidates
 - Mutual right swipes create matches and unlock chat
 
+## App Previews
+
+| Discover | Matches | Messages |
+| --- | --- | --- |
+| ![Discover Preview](img/1.png) | ![Matches Preview](img/2.png) | ![Messages Preview](img/3.png) |
+
 ## Product Highlights
 
 ### Core Flow
