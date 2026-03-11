@@ -8,6 +8,7 @@ import jobRoutes from "./routes/jobRoutes.js";
 import swipeRoutes from "./routes/swipeRoutes.js";
 import matchRoutes from "./routes/matchRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -37,6 +38,7 @@ app.use("/api/jobs", jobRoutes);
 app.use("/api/swipes", swipeRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

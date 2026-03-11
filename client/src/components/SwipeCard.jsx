@@ -2,7 +2,7 @@ import { motion, useAnimation, useMotionValue, useTransform } from "framer-motio
 
 const SWIPE_THRESHOLD = 110;
 
-const SwipeCard = ({ itemKey, onSwipe, disabled = false, children }) => {
+const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", children }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-240, 0, 240], [-14, 0, 14]);
@@ -53,18 +53,18 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, children }) => {
       animate={controls}
       style={{ x, rotate }}
       whileDrag={{ scale: 1.02, cursor: "grabbing" }}
-      className="surface-card relative touch-pan-y overflow-hidden p-4 md:p-5"
+      className={`surface-card relative touch-pan-y overflow-hidden p-5 md:p-6 ${className}`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/10 via-transparent to-positive/10" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/15 via-transparent to-brandStrong/12" />
       <motion.div
         style={{ opacity: passOpacity }}
-        className="pointer-events-none absolute left-4 top-4 rounded-full border border-negative/50 bg-negative/20 px-3 py-1 text-xs font-bold uppercase tracking-widest text-rose-200"
+        className="pointer-events-none absolute left-4 top-4 rounded-full border border-negative/55 bg-negative/24 px-3 py-1 text-xs font-bold uppercase tracking-widest text-rose-100"
       >
         Pass
       </motion.div>
       <motion.div
         style={{ opacity: likeOpacity }}
-        className="pointer-events-none absolute right-4 top-4 rounded-full border border-positive/50 bg-positive/20 px-3 py-1 text-xs font-bold uppercase tracking-widest text-emerald-200"
+        className="pointer-events-none absolute right-4 top-4 rounded-full border border-positive/50 bg-positive/20 px-3 py-1 text-xs font-bold uppercase tracking-widest text-teal-100"
       >
         Interested
       </motion.div>

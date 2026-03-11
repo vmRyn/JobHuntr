@@ -36,7 +36,7 @@ const LoginPage = () => {
     <section className="page-frame flex min-h-screen items-center justify-center pb-20 md:pb-10">
       <Card className="w-full max-w-md space-y-6 p-5 md:p-6">
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Welcome back</p>
+          <p className="app-badge">Welcome back</p>
           <h1 className="font-display text-3xl text-slate-50">Log in to JobHuntr</h1>
         </div>
 
@@ -65,7 +65,7 @@ const LoginPage = () => {
           </Button>
         </form>
 
-        {error && <p className="text-sm font-medium text-rose-300">{error}</p>}
+        {error && <p className="status-error">{error}</p>}
 
         <p className="text-sm text-slate-300">
           New here?{" "}

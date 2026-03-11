@@ -78,6 +78,56 @@ const formatTimestamp = (value) => {
   });
 };
 
+const formatInterviewWindow = (startAt, endAt, timezone = "UTC") => {
+  const parsedStart = startAt ? new Date(startAt) : null;
+  const parsedEnd = endAt ? new Date(endAt) : null;
+
+  if (!parsedStart || Number.isNaN(parsedStart.getTime())) {
+    return "";
+  }
+
+  if (!parsedEnd || Number.isNaN(parsedEnd.getTime())) {
+    try {
+      return parsedStart.toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: timezone || "UTC"
+      });
+    } catch (error) {
+      return parsedStart.toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short"
+      });
+    }
+  }
+
+  try {
+    const startText = parsedStart.toLocaleString([], {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: timezone || "UTC"
+    });
+    const endText = parsedEnd.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezone || "UTC"
+    });
+
+    return `${startText} - ${endText}`;
+  } catch (error) {
+    const startText = parsedStart.toLocaleString([], {
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
+    const endText = parsedEnd.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+
+    return `${startText} - ${endText}`;
+  }
+};
+
 const getSenderLabel = (message, currentUserId, fallbackName) => {
   const senderId = extractId(message?.sender);
   if (senderId && senderId === currentUserId) {
@@ -420,7 +470,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-white/16 bg-slate-900/55 px-4 py-3 text-slate-50">
+      <div className="surface-subtle px-4 py-3 text-slate-50">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {counterpartImage ? (
@@ -430,7 +480,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                 className="h-12 w-12 rounded-2xl border border-white/20 object-cover"
               />
             ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-slate-900/65 text-sm font-semibold text-slate-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-slate-900/75 text-sm font-semibold text-slate-100">
                 {getInitial(counterpartName)}
               </div>
             )}
@@ -448,7 +498,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       {loading && <LoadingSpinner label="Loading messages" />}
 
       {!loading && (
-        <div className="max-h-[340px] space-y-3 overflow-y-auto rounded-2xl border border-white/16 bg-slate-950/55 p-3">
+        <div className="max-h-[340px] space-y-3 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/64 p-3 ring-1 ring-white/5">
           {!messages.length && <p className="text-sm text-slate-300">No messages yet.</p>}
 
           {messages.map((message) => {
@@ -457,6 +507,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
             const timestamp = formatTimestamp(message.createdAt);
             const reactionSummary = buildReactionSummary(message.reactions, currentUser?._id);
             const attachment = message.attachment;
+            const interviewAttachment = message.interviewAttachment;
             const attachmentUrl = getAssetUrl(attachment?.url);
             const messageStatus = mine
               ? hasBeenReadBy(message, counterpartId)
@@ -482,11 +533,48 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                   <div
                     className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                       mine
-                        ? "bg-gradient-to-r from-sky-700 to-cyan-600 text-slate-50 shadow-[0_12px_26px_-18px_rgba(14,116,144,0.95)]"
-                        : "border border-white/18 bg-white/12 text-slate-100"
+                        ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 text-white shadow-[0_12px_30px_-18px_rgba(34,211,238,0.85)]"
+                        : "border border-white/18 bg-white/10 text-slate-100"
                     }`}
                   >
                     {message.text && <p>{message.text}</p>}
+
+                    {interviewAttachment?.interviewId && (
+                      <div
+                        className={`${message.text ? "mt-2" : ""} rounded-xl border px-3 py-2 ${
+                          mine
+                            ? "border-white/30 bg-white/12"
+                            : "border-brand/45 bg-brand/16"
+                        }`}
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                          Interview Attached
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-50">
+                          {interviewAttachment.title || "Interview"}
+                        </p>
+                        <p className="text-xs text-slate-100">
+                          {interviewAttachment.companyName || "Company"} • {interviewAttachment.jobTitle || "Role"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-100">
+                          {formatInterviewWindow(
+                            interviewAttachment.startAt,
+                            interviewAttachment.endAt,
+                            interviewAttachment.timezone
+                          )}
+                        </p>
+                        {interviewAttachment.location && (
+                          <p className="mt-1 text-xs text-slate-100">
+                            Location: {interviewAttachment.location}
+                          </p>
+                        )}
+                        {interviewAttachment.notes && (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-200">
+                            {interviewAttachment.notes}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {attachmentUrl && (
                       <div className={message.text ? "mt-2" : ""}>
@@ -503,7 +591,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                             href={attachmentUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center rounded-xl border border-white/30 bg-white/12 px-3 py-2 text-xs font-semibold text-slate-50 hover:bg-white/20"
+                            className="inline-flex items-center rounded-xl border border-white/28 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-50 hover:border-brand/50 hover:bg-white/15"
                           >
                             {attachment.originalName || "Attachment"}
                             {attachment.size ? ` (${formatFileSize(attachment.size)})` : ""}
@@ -520,7 +608,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                         type="button"
                         className={`rounded-full border px-2 py-0.5 text-xs ${
                           reaction.mine
-                            ? "border-sky-300/60 bg-sky-500/25 text-sky-100"
+                            ? "border-brand/60 bg-brand/24 text-cyan-100"
                             : "border-white/25 bg-white/10 text-slate-100"
                         }`}
                         onClick={() => handleToggleReaction(message._id, reaction.emoji)}
@@ -534,7 +622,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                       <button
                         key={`${message._id}-quick-${emoji}`}
                         type="button"
-                        className="rounded-full border border-white/18 bg-slate-900/55 px-1.5 py-0.5 text-[11px] text-slate-200 hover:border-sky-300/55"
+                        className="rounded-full border border-white/18 bg-slate-900/65 px-1.5 py-0.5 text-[11px] text-slate-200 hover:border-brand/55"
                         onClick={() => handleToggleReaction(message._id, emoji)}
                         disabled={reactingMessageId === message._id}
                       >
@@ -548,7 +636,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
           })}
 
           {isCounterpartTyping && (
-            <p className="text-xs font-medium text-sky-200">{counterpartName} is typing...</p>
+            <p className="text-xs font-medium text-brand">{counterpartName} is typing...</p>
           )}
 
           <div ref={endRef} />
@@ -556,13 +644,13 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       )}
 
       {attachmentFile && (
-        <div className="flex items-center justify-between gap-2 rounded-2xl border border-white/20 bg-slate-900/55 px-3 py-2 text-xs text-slate-100">
+        <div className="surface-subtle flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-100">
           <span className="truncate">
             Attached: {attachmentFile.name} ({formatFileSize(attachmentFile.size)})
           </span>
           <button
             type="button"
-            className="rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:border-sky-300/60"
+            className="rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:border-brand/60"
             onClick={handleRemoveAttachment}
           >
             Remove
@@ -596,7 +684,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         </Button>
       </form>
 
-      {error && <p className="text-sm font-medium text-rose-200">{error}</p>}
+      {error && <p className="status-error">{error}</p>}
     </div>
   );
 };

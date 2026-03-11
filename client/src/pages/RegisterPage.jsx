@@ -102,7 +102,7 @@ const RegisterPage = () => {
     <section className="page-frame flex min-h-screen items-center justify-center pb-20 md:pb-10">
       <Card className="w-full max-w-2xl space-y-6 p-5 md:p-6">
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Create account</p>
+          <p className="app-badge">Create account</p>
           <h1 className="font-display text-3xl text-slate-50">Join JobHuntr</h1>
         </div>
 
@@ -218,7 +218,7 @@ const RegisterPage = () => {
           </Button>
         </form>
 
-        {error && <p className="text-sm font-medium text-rose-300">{error}</p>}
+        {error && <p className="status-error">{error}</p>}
 
         <p className="text-sm text-slate-300">
           Already have an account?{" "}

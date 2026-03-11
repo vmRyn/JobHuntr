@@ -38,10 +38,10 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
             key={match._id}
             type="button"
             onClick={() => onSelect(match)}
-            className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-sky-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+            className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
               selected
-                ? "border-sky-300/65 bg-sky-500/15 ring-1 ring-sky-300/35"
-                : "border-white/16 bg-slate-900/42 hover:border-sky-300/45 hover:bg-slate-900/60"
+                ? "border-brand/60 bg-gradient-to-r from-brand/18 to-brandStrong/15 ring-1 ring-brand/35"
+                : "border-white/15 bg-slate-950/48 hover:border-brand/45 hover:bg-slate-900/62"
             }`}
           >
             <div className="flex items-center gap-3">
@@ -52,7 +52,7 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
                   className="h-11 w-11 rounded-2xl border border-white/20 object-cover"
                 />
               ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-slate-900/65 text-sm font-semibold text-slate-100">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-slate-900/75 text-sm font-semibold text-slate-100">
                   {getCounterpartInitial(counterpartName)}
                 </div>
               )}

@@ -47,7 +47,7 @@ const PipelineBoard = ({
   return (
     <div className="grid gap-3 xl:grid-cols-4">
       {stages.map((stage) => (
-        <div key={stage.id} className="rounded-3xl border border-white/16 bg-slate-900/55 p-3">
+        <div key={stage.id} className="surface-subtle p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-50">{stage.label}</p>
             <span className="chip">{groupedMatches[stage.id].length}</span>
@@ -61,8 +61,8 @@ const PipelineBoard = ({
                   key={match._id}
                   className={`w-full rounded-2xl border p-3 text-left transition ${
                     isSelected
-                      ? "border-sky-300/60 bg-sky-500/15"
-                      : "border-white/14 bg-slate-900/45 hover:border-sky-300/45"
+                      ? "border-brand/60 bg-gradient-to-r from-brand/18 to-brandStrong/15"
+                      : "border-white/15 bg-slate-950/55 hover:border-brand/45"
                   }`}
                 >
                   <button type="button" className="w-full text-left" onClick={() => onSelectMatch(match)}>
@@ -87,7 +87,7 @@ const PipelineBoard = ({
             })}
 
             {!groupedMatches[stage.id].length && (
-              <div className="rounded-2xl border border-dashed border-white/20 bg-slate-900/45 p-3 text-xs text-slate-300">
+              <div className="rounded-2xl border border-dashed border-white/20 bg-slate-950/52 p-3 text-xs text-slate-300">
                 No candidates in this stage.
               </div>
             )}

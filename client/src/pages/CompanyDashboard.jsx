@@ -340,8 +340,8 @@ const CompanyDashboard = () => {
                 onClick={() => setSelectedJobId(job._id)}
                 className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-semibold transition ${
                   selectedJobId === job._id
-                    ? "border-brand/60 bg-brand/15 text-brand"
-                    : "border-white/15 bg-white/5 text-slate-300 hover:border-brand/40"
+                    ? "border-brand/60 bg-gradient-to-r from-brand/20 to-brandStrong/15 text-cyan-100"
+                    : "border-white/15 bg-white/8 text-slate-300 hover:border-brand/45"
                 }`}
               >
                 {job.title}
@@ -350,7 +350,7 @@ const CompanyDashboard = () => {
           </div>
 
           {selectedJob && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
+            <div className="surface-subtle px-3 py-2 text-sm text-slate-300">
               Active role: <span className="font-semibold text-slate-100">{selectedJob.title}</span>
             </div>
           )}
@@ -396,7 +396,7 @@ const CompanyDashboard = () => {
                 {(activeCandidate.seekerProfile?.skills || []).map((skill) => (
                   <span
                     key={skill}
-                    className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+                    className="chip chip-accent normal-case tracking-normal"
                   >
                     {skill}
                   </span>
@@ -428,18 +428,18 @@ const CompanyDashboard = () => {
 
         <div className="space-y-2.5">
           {jobs.map((job) => (
-            <div key={job._id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div key={job._id} className="surface-subtle p-4">
               <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-base font-semibold text-slate-100">{job.title}</p>
                   <p className="text-xs text-slate-300">{job.location} • {job.postcode || "No postcode"}</p>
                 </div>
-                {selectedJobId === job._id && <span className="chip">Active</span>}
+                {selectedJobId === job._id && <span className="chip chip-accent">Active</span>}
               </div>
 
               <div className="mb-3 flex flex-wrap gap-2">
-                {job.industry && <span className="chip">{job.industry}</span>}
-                {job.salary && <span className="chip">{job.salary}</span>}
+                {job.industry && <span className="chip normal-case tracking-normal">{job.industry}</span>}
+                {job.salary && <span className="chip normal-case tracking-normal">{job.salary}</span>}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -587,7 +587,7 @@ const CompanyDashboard = () => {
         />
 
         {selectedMatch && (
-          <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4">
+          <div className="surface-subtle p-4">
             <p className="text-base font-semibold text-slate-100">
               {matchedCandidateProfile.name || "Candidate"}
             </p>
@@ -595,15 +595,21 @@ const CompanyDashboard = () => {
               {matchedCandidateProfile.location || "Location not set"}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="chip">Stage: {(selectedMatch.stage || "new").toUpperCase()}</span>
-              {matchedCandidateProfile.industryField && <span className="chip">{matchedCandidateProfile.industryField}</span>}
-              {selectedMatch.job?.title && <span className="chip">Matched for {selectedMatch.job.title}</span>}
+              <span className="chip chip-accent normal-case tracking-normal">Stage: {(selectedMatch.stage || "new").toUpperCase()}</span>
+              {matchedCandidateProfile.industryField && <span className="chip normal-case tracking-normal">{matchedCandidateProfile.industryField}</span>}
+              {selectedMatch.job?.title && <span className="chip normal-case tracking-normal">Matched for {selectedMatch.job.title}</span>}
             </div>
           </div>
         )}
       </Card>
 
-      <InterviewScheduler selectedMatch={selectedMatch} onNotice={setNotice} onError={setError} />
+      <InterviewScheduler
+        selectedMatch={selectedMatch}
+        onNotice={setNotice}
+        onError={setError}
+        canSchedule={user.userType === "company"}
+        allowAttachToConversation={user.userType === "company"}
+      />
     </div>
   );
 

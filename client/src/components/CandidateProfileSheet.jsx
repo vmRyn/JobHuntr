@@ -53,7 +53,7 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
 
       {!loading && candidate && (
         <div className="space-y-5">
-          <div className="flex flex-col gap-4 rounded-3xl border border-white/16 bg-slate-900/55 p-4 md:flex-row md:items-center">
+          <div className="surface-subtle flex flex-col gap-4 p-4 md:flex-row md:items-center">
             {profileImage ? (
               <img
                 src={profileImage}
@@ -61,7 +61,7 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
                 className="h-24 w-24 rounded-3xl border border-white/20 object-cover"
               />
             ) : (
-              <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-white/20 bg-slate-900/65 text-2xl font-semibold text-slate-100">
+              <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-white/20 bg-slate-900/72 text-2xl font-semibold text-slate-100">
                 {displayName.charAt(0).toUpperCase() || "?"}
               </div>
             )}
@@ -69,16 +69,16 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
             <div className="space-y-2">
               <h3 className="font-display text-2xl text-slate-50">{displayName}</h3>
               <div className="flex flex-wrap gap-2">
-                {seekerProfile.location && <span className="chip">{seekerProfile.location}</span>}
-                <span className="chip">{industryField}</span>
-                {matchedJob?.title && <span className="chip">{matchedJob.title}</span>}
+                {seekerProfile.location && <span className="chip normal-case tracking-normal">{seekerProfile.location}</span>}
+                <span className="chip chip-accent normal-case tracking-normal">{industryField}</span>
+                {matchedJob?.title && <span className="chip normal-case tracking-normal">{matchedJob.title}</span>}
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
             <p className="label-text">About</p>
-            <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4 text-sm leading-relaxed text-slate-200">
+            <div className="surface-subtle p-4 text-sm leading-relaxed text-slate-200">
               {seekerProfile.bio || "No bio provided yet."}
             </div>
           </div>
@@ -90,7 +90,7 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
                 seekerProfile.skills.map((skill) => (
                   <span
                     key={skill}
-                    className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+                    className="chip chip-accent normal-case tracking-normal"
                   >
                     {skill}
                   </span>
@@ -109,14 +109,14 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
                   href={cvUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-gradient-to-r from-sky-700 to-cyan-600 px-4 text-sm font-semibold text-slate-50 transition hover:from-sky-600 hover:to-cyan-500"
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 px-4 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
                 >
                   View CV
                 </a>
                 <a
                   href={cvUrl}
                   download={seekerProfile.cvOriginalName || true}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/28 bg-white/10 px-4 text-sm font-semibold text-slate-50 transition hover:border-sky-300/60 hover:bg-white/16"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-white/18 bg-white/8 px-4 text-sm font-semibold text-slate-100 transition hover:border-brand/55 hover:bg-white/12"
                 >
                   Download CV
                 </a>
@@ -139,7 +139,7 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
         </div>
       )}
 
-      {error && <p className="text-sm font-medium text-rose-200">{error}</p>}
+      {error && <p className="status-error">{error}</p>}
     </ModalSheet>
   );
 };

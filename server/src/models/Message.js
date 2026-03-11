@@ -12,6 +12,29 @@ const messageAttachmentSchema = new Schema(
   { _id: false }
 );
 
+const interviewAttachmentSchema = new Schema(
+  {
+    interviewId: {
+      type: Schema.Types.ObjectId,
+      required: true
+    },
+    title: { type: String, trim: true, default: "Interview" },
+    jobTitle: { type: String, trim: true, default: "" },
+    companyName: { type: String, trim: true, default: "" },
+    startAt: { type: Date, required: true },
+    endAt: { type: Date, required: true },
+    timezone: { type: String, trim: true, default: "UTC" },
+    location: { type: String, trim: true, default: "" },
+    notes: { type: String, trim: true, default: "" },
+    status: {
+      type: String,
+      enum: ["scheduled", "completed", "cancelled"],
+      default: "scheduled"
+    }
+  },
+  { _id: false }
+);
+
 const messageReactionSchema = new Schema(
   {
     user: {
@@ -58,6 +81,10 @@ const messageSchema = new Schema(
       type: messageAttachmentSchema,
       default: null
     },
+    interviewAttachment: {
+      type: interviewAttachmentSchema,
+      default: null
+    },
     readBy: [
       {
         type: Schema.Types.ObjectId,
@@ -75,10 +102,11 @@ const messageSchema = new Schema(
 messageSchema.pre("validate", function ensureContent(next) {
   const messageText = typeof this.text === "string" ? this.text.trim() : "";
   const attachmentUrl = this.attachment?.url || "";
+  const hasInterviewAttachment = Boolean(this.interviewAttachment?.interviewId);
 
   this.text = messageText;
 
-  if (!messageText && !attachmentUrl) {
+  if (!messageText && !attachmentUrl && !hasInterviewAttachment) {
     this.invalidate("text", "Message text or attachment is required");
   }
 

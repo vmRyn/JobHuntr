@@ -1,8 +1,12 @@
 import Match from "../models/Match.js";
+import Message from "../models/Message.js";
+import Notification from "../models/Notification.js";
 import { getIO } from "../config/socket.js";
 
 const pipelineStages = new Set(["new", "screening", "interview", "offer"]);
 const interviewStatuses = new Set(["scheduled", "completed", "cancelled"]);
+const messageUserProjection =
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
 
 const isParticipant = (match, userId) =>
   match &&
@@ -26,10 +30,55 @@ const parseDateOrNull = (value) => {
   return parsed;
 };
 
+const formatInterviewDate = (value, timezone = "UTC") => {
+  const parsed = parseDateOrNull(value);
+
+  if (!parsed) {
+    return "";
+  }
+
+  try {
+    return parsed.toLocaleString("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: timezone || "UTC"
+    });
+  } catch (error) {
+    return parsed.toLocaleString("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    });
+  }
+};
+
 const emitMatchEvent = (eventName, payload) => {
   try {
     const io = getIO();
     io.to(`match:${payload.matchId}`).emit(eventName, payload);
+  } catch (socketError) {
+    // Socket.io may not be available in some test contexts.
+  }
+};
+
+const emitUserEvent = (userId, eventName, payload) => {
+  try {
+    const io = getIO();
+    io.to(`user:${userId}`).emit(eventName, payload);
+  } catch (socketError) {
+    // Socket.io may not be available in some test contexts.
+  }
+};
+
+const populateMessage = (query) =>
+  query
+    .populate("sender", messageUserProjection)
+    .populate("receiver", messageUserProjection);
+
+const emitNewMessage = (matchId, receiverId, message) => {
+  try {
+    const io = getIO();
+    io.to(`match:${matchId}`).emit("newMessage", message);
+    io.to(`user:${receiverId}`).emit("newMessage", message);
   } catch (socketError) {
     // Socket.io may not be available in some test contexts.
   }
@@ -139,14 +188,19 @@ export const getMatchInterviews = async (req, res) => {
 
 export const createMatchInterview = async (req, res) => {
   try {
-    const match = await Match.findById(req.params.matchId);
+    if (req.user.userType !== "company") {
+      return res.status(403).json({ message: "Only companies can schedule interviews" });
+    }
+
+    const match = await Match.findOne({
+      _id: req.params.matchId,
+      company: req.user._id
+    })
+      .populate("job", "title")
+      .populate("company", "companyProfile.companyName");
 
     if (!match) {
       return res.status(404).json({ message: "Match not found" });
-    }
-
-    if (!isParticipant(match, req.user._id)) {
-      return res.status(403).json({ message: "Forbidden" });
     }
 
     const title = typeof req.body?.title === "string" && req.body.title.trim() ? req.body.title.trim() : "Interview";
@@ -164,8 +218,19 @@ export const createMatchInterview = async (req, res) => {
       return res.status(400).json({ message: "endAt must be after startAt" });
     }
 
+    const jobTitle =
+      typeof match.job === "object" && match.job?.title
+        ? match.job.title
+        : "Role";
+    const companyName =
+      req.user.companyProfile?.companyName ||
+      (typeof match.company === "object" ? match.company?.companyProfile?.companyName : "") ||
+      "Company";
+
     match.interviews.push({
       title,
+      jobTitle,
+      companyName,
       startAt,
       endAt,
       timezone,
@@ -175,16 +240,78 @@ export const createMatchInterview = async (req, res) => {
       createdBy: req.user._id
     });
 
+    if (match.stage !== "interview") {
+      match.stage = "interview";
+    }
+
     const interviewId = match.interviews[match.interviews.length - 1]._id.toString();
     await match.save();
 
     const populatedMatch = await populateMatch(Match.findById(match._id));
     const interview = populatedMatch.interviews.id(interviewId);
 
+    const matchId = match._id.toString();
+    const seekerId = match.seeker.toString();
+    const interviewDateDisplay = formatInterviewDate(startAt, timezone);
+    const notification = await Notification.create({
+      user: match.seeker,
+      type: "interview_scheduled",
+      title: "Interview Scheduled",
+      message: `${companyName} scheduled an interview for ${jobTitle} on ${interviewDateDisplay}.`,
+      company: match.company?._id || match.company,
+      companyName,
+      job: match.job?._id || match.job,
+      jobTitle,
+      match: match._id,
+      interviewId: interview._id,
+      interviewAt: startAt,
+      location
+    });
+
+    const unreadCount = await Notification.countDocuments({
+      user: match.seeker,
+      isRead: false
+    });
+
     emitMatchEvent("interviewCreated", {
-      matchId: match._id.toString(),
+      matchId,
       interview
     });
+
+    emitUserEvent(seekerId, "notificationCreated", {
+      notification,
+      unreadCount
+    });
+
+    try {
+      const interviewMessage = await Message.create({
+        match: match._id,
+        sender: req.user._id,
+        receiver: match.seeker,
+        text: `${companyName} scheduled an interview for ${jobTitle}.`,
+        readBy: [req.user._id],
+        interviewAttachment: {
+          interviewId: interview._id,
+          title: interview.title || "Interview",
+          jobTitle,
+          companyName,
+          startAt,
+          endAt,
+          timezone,
+          location,
+          notes,
+          status: interview.status || "scheduled"
+        }
+      });
+
+      const populatedInterviewMessage = await populateMessage(
+        Message.findById(interviewMessage._id)
+      );
+
+      emitNewMessage(matchId, seekerId, populatedInterviewMessage);
+    } catch (messageError) {
+      // Interview scheduling should still succeed even if message mirroring fails.
+    }
 
     return res.status(201).json(interview);
   } catch (error) {
@@ -194,14 +321,17 @@ export const createMatchInterview = async (req, res) => {
 
 export const updateMatchInterview = async (req, res) => {
   try {
-    const match = await Match.findById(req.params.matchId);
+    if (req.user.userType !== "company") {
+      return res.status(403).json({ message: "Only companies can update interviews" });
+    }
+
+    const match = await Match.findOne({
+      _id: req.params.matchId,
+      company: req.user._id
+    });
 
     if (!match) {
       return res.status(404).json({ message: "Match not found" });
-    }
-
-    if (!isParticipant(match, req.user._id)) {
-      return res.status(403).json({ message: "Forbidden" });
     }
 
     const interview = match.interviews.id(req.params.interviewId);

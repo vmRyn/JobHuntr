@@ -137,6 +137,7 @@ JobHuntr/
 ### server
 - npm run dev: Start backend with nodemon
 - npm start: Start backend with node
+- npm run seed:demo: Seed demo companies, seekers, jobs, and matches
 
 ### client
 - npm run dev: Start Vite dev server
@@ -168,9 +169,16 @@ Base path: /api
 - Matches
    - GET /matches
    - GET /matches/:matchId/candidate-profile
+   - GET /matches/:matchId/interviews
+   - POST /matches/:matchId/interviews (company only)
+   - PATCH /matches/:matchId/interviews/:interviewId (company only)
 - Messages
    - GET /messages/:matchId
    - POST /messages/:matchId
+- Notifications
+   - GET /notifications
+   - PATCH /notifications/:notificationId/read
+   - PATCH /notifications/read-all
 
 See API_EXAMPLES.md for request examples.
 
@@ -190,3 +198,26 @@ See API_EXAMPLES.md for request examples.
 - Empty discovery results
    - Ensure company jobs include postcode and industry
    - Try broadening radius/industry filters
+
+## Demo Seed Data
+
+Run the seed script from the server directory:
+
+```bash
+npm run seed:demo
+```
+
+This creates:
+- 4 demo company accounts
+- 3 demo seeker accounts
+- 12 demo jobs (3 per company)
+- demo matches and swipe records for interview scheduling tests
+
+### Demo Company Credentials
+
+All demo companies use the same password: `DemoCompany123!`
+
+- Northstar Labs: `northstar.talent@demo.jobhuntr.local`
+- PixelForge Studio: `pixelforge.hiring@demo.jobhuntr.local`
+- Harbor AI: `harborai.recruit@demo.jobhuntr.local`
+- Velocity Health: `velocityhealth.careers@demo.jobhuntr.local`

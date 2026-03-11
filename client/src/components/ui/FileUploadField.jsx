@@ -33,20 +33,20 @@ const FileUploadField = ({
   return (
     <label className={`block space-y-2 ${className}`}>
       {label && <span className="label-text">{label}</span>}
-      <div className="rounded-3xl border border-dashed border-white/16 bg-slate-950/45 p-4">
+      <div className="rounded-3xl border border-dashed border-white/18 bg-slate-950/52 p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
             <input
               type="file"
               accept={accept}
               onChange={(event) => onFileChange(event.target.files?.[0] || null)}
-              className="block w-full text-sm text-slate-200 file:mr-4 file:rounded-2xl file:border-0 file:bg-sky-600/30 file:px-4 file:py-2 file:font-semibold file:text-sky-100 hover:file:bg-sky-500/40"
+              className="block w-full text-sm text-slate-200 file:mr-3 file:rounded-xl file:border file:border-brand/45 file:bg-brand/20 file:px-3 file:py-2 file:font-semibold file:text-cyan-50 hover:file:bg-brand/30"
             />
             {helpText && <p className="text-xs text-slate-300">{helpText}</p>}
             {file && <p className="text-sm text-slate-300">Selected: {file.name}</p>}
             {!file && existingLabel && <p className="text-sm text-slate-300">Current: {existingLabel}</p>}
             {!file && resolvedExistingUrl && !existingLabel && (
-              <a className="text-sm font-medium text-sky-200 hover:text-sky-100" href={resolvedExistingUrl} target="_blank" rel="noreferrer">
+              <a className="text-sm font-medium text-brand hover:text-brandStrong" href={resolvedExistingUrl} target="_blank" rel="noreferrer">
                 View current file
               </a>
             )}
@@ -56,7 +56,7 @@ const FileUploadField = ({
             <img
               src={previewUrl || resolvedExistingUrl}
               alt={buttonLabel || label || "Uploaded file preview"}
-              className="h-20 w-20 rounded-2xl border border-white/10 object-cover"
+              className="h-20 w-20 rounded-2xl border border-white/18 object-cover"
             />
           )}
         </div>

@@ -9,6 +9,16 @@ const interviewSchema = new Schema(
       trim: true,
       default: "Interview"
     },
+    jobTitle: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    companyName: {
+      type: String,
+      trim: true,
+      default: ""
+    },
     startAt: {
       type: Date,
       required: true

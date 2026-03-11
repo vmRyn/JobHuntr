@@ -7,7 +7,7 @@ const JobCardContent = ({ job }) => {
   const jobIndustry = job.industry || companyIndustry;
 
   return (
-    <div className="relative z-10 space-y-5 pt-10">
+    <div className="relative z-10 flex h-full flex-col gap-5 pt-10">
       {companyLogo && (
         <img
           src={companyLogo}
@@ -25,16 +25,16 @@ const JobCardContent = ({ job }) => {
         <span className="chip">{job.location}</span>
         {job.postcode && <span className="chip">{job.postcode}</span>}
         {job.salary && <span className="chip">{job.salary}</span>}
-        <span className="chip">{jobIndustry}</span>
+        <span className="chip chip-accent">{jobIndustry}</span>
       </div>
 
       <p className="text-sm leading-relaxed text-slate-300">{job.description}</p>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap gap-2">
         {(job.requiredSkills || []).map((skill) => (
           <span
             key={skill}
-            className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+            className="chip chip-accent normal-case tracking-normal"
           >
             {skill}
           </span>

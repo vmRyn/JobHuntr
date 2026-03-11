@@ -1,5 +1,5 @@
 const SegmentedTabs = ({ tabs, value, onChange, className = "" }) => (
-  <div className={`inline-flex gap-1 rounded-2xl border border-white/10 bg-white/5 p-1 ${className}`}>
+  <div className={`inline-flex gap-1 rounded-2xl border border-white/12 bg-slate-900/60 p-1.5 ${className}`}>
     {tabs.map((tab) => {
       const active = tab.id === value;
 

@@ -59,12 +59,12 @@ const AutocompleteField = ({
         />
 
         {focused && matches.length > 0 && (
-          <div className="absolute left-0 right-0 top-[calc(100%+0.45rem)] z-20 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-[0_18px_30px_-18px_rgba(0,0,0,0.8)]">
+          <div className="surface-popover absolute left-0 right-0 top-[calc(100%+0.45rem)] z-20 overflow-hidden">
             {matches.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
-                className="block w-full px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-white/8"
+                className="block w-full px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-brand/12"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleSelect(suggestion)}
               >

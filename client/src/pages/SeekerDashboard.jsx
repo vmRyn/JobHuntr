@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { io } from "socket.io-client";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import ChatWindow from "../components/ChatWindow";
@@ -51,6 +53,22 @@ const unitOptions = [
   { value: "km", label: "Kilometres" }
 ];
 
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+
+const toLocalDisplay = (value) => {
+  if (!value) return "";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+};
+
 const SeekerDashboard = () => {
   const { user, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("discover");
@@ -63,20 +81,75 @@ const SeekerDashboard = () => {
   const [profileForm, setProfileForm] = useState(createInitialProfile(user));
   const [profileFiles, setProfileFiles] = useState({ profilePicture: null, cv: null });
   const [discoveryFilters, setDiscoveryFilters] = useState(defaultDiscoveryFilters);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [debouncedPostcode, setDebouncedPostcode] = useState(defaultDiscoveryFilters.postcode);
+  const [interviewNotifications, setInterviewNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const socketRef = useRef(null);
 
   const activeJob = jobs[0] || null;
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+
+    const hasPostcode = Boolean(discoveryFilters.postcode.trim());
+    const radiusChanged =
+      discoveryFilters.radius !== defaultDiscoveryFilters.radius ||
+      discoveryFilters.radiusUnit !== defaultDiscoveryFilters.radiusUnit;
+
+    if (hasPostcode || radiusChanged) {
+      count += 1;
+    }
+
+    if (discoveryFilters.industry) {
+      count += 1;
+    }
+
+    return count;
+  }, [discoveryFilters]);
+
+  const filterSummary = useMemo(() => {
+    const chips = [];
+
+    if (discoveryFilters.postcode.trim()) {
+      chips.push(discoveryFilters.postcode.trim().toUpperCase());
+    }
+
+    if (discoveryFilters.industry) {
+      chips.push(discoveryFilters.industry);
+    }
+
+    if (!chips.length) {
+      return "All industries • 25 mi";
+    }
+
+    return chips.join(" • ");
+  }, [discoveryFilters]);
+
+  const discoverDeckMinHeight = filtersExpanded
+    ? "max(26rem, calc(100dvh - 24rem))"
+    : "max(30rem, calc(100dvh - 11.5rem))";
+
+  const swipeCardHeightClass = filtersExpanded
+    ? "min-h-[54vh] md:min-h-[58vh]"
+    : "min-h-[72vh] md:min-h-[78vh]";
 
   const tabs = useMemo(
     () => [
       { id: "discover", label: "Discover", icon: <DiscoverIcon /> },
-      { id: "matches", label: "Matches", icon: <MatchesIcon /> },
+      {
+        id: "matches",
+        label: "Matches",
+        icon: <MatchesIcon />,
+        badge: unreadNotificationCount
+      },
       { id: "messages", label: "Messages", icon: <MessagesIcon /> },
       { id: "profile", label: "Profile", icon: <ProfileIcon /> }
     ],
-    []
+    [unreadNotificationCount]
   );
 
   useEffect(() => {
@@ -132,9 +205,114 @@ const SeekerDashboard = () => {
     }
   };
 
+  const loadInterviewNotifications = async () => {
+    setLoadingNotifications(true);
+
+    try {
+      const { data } = await api.get("/notifications", {
+        params: {
+          type: "interview_scheduled",
+          limit: 25
+        }
+      });
+
+      setInterviewNotifications(data.notifications || []);
+      setUnreadNotificationCount(data.unreadCount || 0);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to load notifications");
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleMarkNotificationRead = async (notificationId) => {
+    if (!notificationId) {
+      return;
+    }
+
+    try {
+      const { data } = await api.patch(`/notifications/${notificationId}/read`);
+
+      setInterviewNotifications((prev) =>
+        prev.map((notification) =>
+          notification._id === notificationId
+            ? { ...notification, isRead: true }
+            : notification
+        )
+      );
+      setUnreadNotificationCount((prev) =>
+        typeof data.unreadCount === "number" ? data.unreadCount : Math.max(prev - 1, 0)
+      );
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to update notification");
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!unreadNotificationCount) {
+      return;
+    }
+
+    try {
+      await api.patch("/notifications/read-all");
+
+      setInterviewNotifications((prev) =>
+        prev.map((notification) => ({ ...notification, isRead: true }))
+      );
+      setUnreadNotificationCount(0);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to update notifications");
+    }
+  };
+
   useEffect(() => {
     loadMatches();
+    loadInterviewNotifications();
   }, []);
+
+  useEffect(() => {
+    if (user?.userType !== "seeker") {
+      return undefined;
+    }
+
+    const token = localStorage.getItem("jobhuntr_token");
+
+    if (!token) {
+      return undefined;
+    }
+
+    const socket = io(SOCKET_URL, {
+      auth: { token }
+    });
+
+    socketRef.current = socket;
+
+    const onNotificationCreated = (payload) => {
+      const incomingNotification = payload?.notification;
+
+      if (!incomingNotification || incomingNotification.type !== "interview_scheduled") {
+        return;
+      }
+
+      setInterviewNotifications((prev) => [incomingNotification, ...prev.filter((item) => item._id !== incomingNotification._id)].slice(0, 25));
+      setUnreadNotificationCount((prev) => {
+        if (typeof payload?.unreadCount === "number") {
+          return payload.unreadCount;
+        }
+
+        return prev + 1;
+      });
+      setNotice(incomingNotification.message || "New interview scheduled.");
+    };
+
+    socket.on("notificationCreated", onNotificationCreated);
+
+    return () => {
+      socket.off("notificationCreated", onNotificationCreated);
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [user?.userType]);
 
   useEffect(() => {
     loadJobs({ ...discoveryFilters, postcode: debouncedPostcode });
@@ -171,6 +349,7 @@ const SeekerDashboard = () => {
 
   const clearFilters = () => {
     setDiscoveryFilters(defaultDiscoveryFilters);
+    setFiltersExpanded(false);
   };
 
   const handleSkillsChange = (skills) => {
@@ -215,89 +394,137 @@ const SeekerDashboard = () => {
   };
 
   const renderDiscover = () => (
-    <div className="space-y-3">
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discovery filters</p>
-            <h2 className="font-display text-xl text-slate-50">Find nearby roles</h2>
-          </div>
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Reset
-          </Button>
+    <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-3">
+      <button
+        type="button"
+        onClick={() => setFiltersExpanded((prev) => !prev)}
+        className="surface-subtle flex items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Discovery filters
+          </p>
+          <p className="truncate text-sm text-slate-200">{filterSummary}</p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <InputField
-            label="Postcode"
-            name="postcode"
-            value={discoveryFilters.postcode}
-            onChange={handleFilterChange}
-            placeholder="EC1A 1BB"
-          />
-          <SelectField
-            label="Radius"
-            name="radius"
-            value={discoveryFilters.radius}
-            onChange={handleFilterChange}
-            options={radiusOptions}
-          />
-          <SelectField
-            label="Unit"
-            name="radiusUnit"
-            value={discoveryFilters.radiusUnit}
-            onChange={handleFilterChange}
-            options={unitOptions}
-          />
-          <SelectField
-            label="Industry"
-            name="industry"
-            value={discoveryFilters.industry}
-            onChange={handleFilterChange}
-            options={jobIndustryOptions}
-            placeholder="All industries"
-          />
+        <div className="flex items-center gap-2">
+          {activeFilterCount > 0 && <span className="chip chip-accent">{activeFilterCount} active</span>}
+          <span className="rounded-full border border-white/15 bg-slate-900/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
+            {filtersExpanded ? "Hide" : "Show"}
+          </span>
         </div>
+      </button>
 
-        <p className="text-sm text-slate-300">
-          Discovery updates automatically as you change postcode radius and industry filters.
-        </p>
-      </Card>
+      <AnimatePresence initial={false}>
+        {filtersExpanded && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <Card className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discovery filters</p>
+                  <h2 className="font-display text-xl text-slate-50">Find nearby roles</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Reset
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setFiltersExpanded(false)}>
+                    Done
+                  </Button>
+                </div>
+              </div>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discover</p>
-            <h2 className="font-display text-2xl text-slate-50">Swipe jobs</h2>
-          </div>
-          <span className="chip">{jobs.length} in queue</span>
-        </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InputField
+                  label="Postcode"
+                  name="postcode"
+                  value={discoveryFilters.postcode}
+                  onChange={handleFilterChange}
+                  placeholder="EC1A 1BB"
+                />
+                <SelectField
+                  label="Radius"
+                  name="radius"
+                  value={discoveryFilters.radius}
+                  onChange={handleFilterChange}
+                  options={radiusOptions}
+                />
+                <SelectField
+                  label="Unit"
+                  name="radiusUnit"
+                  value={discoveryFilters.radiusUnit}
+                  onChange={handleFilterChange}
+                  options={unitOptions}
+                />
+                <SelectField
+                  label="Industry"
+                  name="industry"
+                  value={discoveryFilters.industry}
+                  onChange={handleFilterChange}
+                  options={jobIndustryOptions}
+                  placeholder="All industries"
+                />
+              </div>
 
-        {loadingJobs && <LoadingSpinner label="Loading opportunities" />}
+              <p className="text-sm text-slate-300">
+                Discovery updates automatically as you change postcode radius and industry filters.
+              </p>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {!loadingJobs && activeJob && (
-          <>
-            <SwipeCard itemKey={activeJob._id} onSwipe={handleSwipe}>
-              <JobCardContent job={activeJob} />
-            </SwipeCard>
-            <div className="grid grid-cols-3 gap-2">
-              <Button variant="secondary" onClick={() => handleSwipe("left")}>
-                Pass
-              </Button>
-              <Button variant="ghost" onClick={() => setDetailsOpen(true)}>
-                Details
-              </Button>
-              <Button onClick={() => handleSwipe("right")}>Like</Button>
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 180, damping: 24 }}
+        className="flex flex-1"
+        style={{ minHeight: discoverDeckMinHeight }}
+      >
+        <Card className="flex h-full w-full flex-col space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discover</p>
+              <h2 className="font-display text-2xl text-slate-50">Swipe jobs</h2>
             </div>
-          </>
-        )}
-
-        {!loadingJobs && !activeJob && (
-          <div className="empty-state p-5">
-            No jobs match your current filters right now. Broaden the radius or reset filters.
+            <span className="chip normal-case tracking-normal">{jobs.length} in queue</span>
           </div>
-        )}
-      </Card>
+
+          {loadingJobs && (
+            <div className="flex flex-1 items-center">
+              <LoadingSpinner label="Loading opportunities" />
+            </div>
+          )}
+
+          {!loadingJobs && activeJob && (
+            <div className="flex flex-1 flex-col gap-3">
+              <SwipeCard itemKey={activeJob._id} onSwipe={handleSwipe} className={`h-full ${swipeCardHeightClass}`}>
+                <JobCardContent job={activeJob} />
+              </SwipeCard>
+              <div className="grid grid-cols-3 gap-2">
+                <Button variant="secondary" onClick={() => handleSwipe("left")}>
+                  Pass
+                </Button>
+                <Button variant="ghost" onClick={() => setDetailsOpen(true)}>
+                  Details
+                </Button>
+                <Button onClick={() => handleSwipe("right")}>Like</Button>
+              </div>
+            </div>
+          )}
+
+          {!loadingJobs && !activeJob && (
+            <div className="empty-state flex flex-1 items-center justify-center p-5 text-center">
+              No jobs match your current filters right now. Broaden the radius or reset filters.
+            </div>
+          )}
+        </Card>
+      </motion.div>
 
       <ModalSheet
         open={detailsOpen && Boolean(activeJob)}
@@ -312,7 +539,7 @@ const SeekerDashboard = () => {
               {(activeJob.requiredSkills || []).map((skill) => (
                 <span
                   key={skill}
-                  className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+                  className="chip chip-accent normal-case tracking-normal"
                 >
                   {skill}
                 </span>
@@ -326,6 +553,69 @@ const SeekerDashboard = () => {
 
   const renderMatches = () => (
     <div className="space-y-3">
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Interview updates</p>
+            <h2 className="font-display text-xl text-slate-50">Company scheduling notifications</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="chip chip-accent">{unreadNotificationCount} unread</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!unreadNotificationCount}
+              onClick={handleMarkAllNotificationsRead}
+            >
+              Mark all read
+            </Button>
+          </div>
+        </div>
+
+        {loadingNotifications && <LoadingSpinner label="Loading interview notifications" />}
+
+        {!loadingNotifications && !interviewNotifications.length && (
+          <div className="empty-state">No interview notifications yet.</div>
+        )}
+
+        {!loadingNotifications && interviewNotifications.length > 0 && (
+          <div className="space-y-2">
+            {interviewNotifications.map((notification) => (
+              <div
+                key={notification._id}
+                className={`surface-subtle p-3 ${notification.isRead ? "opacity-80" : "ring-1 ring-brand/35"}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-100">{notification.title}</p>
+                    <p className="text-xs text-slate-300">{notification.message}</p>
+                    <p className="text-xs text-slate-300">
+                      {notification.companyName || "Company"} • {notification.jobTitle || "Role"}
+                    </p>
+                    <p className="text-xs text-slate-300">
+                      {toLocalDisplay(notification.interviewAt)}
+                      {notification.location ? ` • ${notification.location}` : ""}
+                    </p>
+                  </div>
+
+                  {!notification.isRead && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleMarkNotificationRead(notification._id)}
+                    >
+                      Mark read
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -350,7 +640,12 @@ const SeekerDashboard = () => {
         />
       </Card>
 
-      <InterviewScheduler selectedMatch={selectedMatch} onNotice={setNotice} onError={setError} />
+      <InterviewScheduler
+        selectedMatch={selectedMatch}
+        onNotice={setNotice}
+        onError={setError}
+        canSchedule={false}
+      />
     </div>
   );
 

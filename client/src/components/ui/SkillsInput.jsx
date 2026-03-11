@@ -43,12 +43,12 @@ const SkillsInput = ({
   return (
     <label className={`block space-y-2 ${className}`}>
       {label && <span className="label-text">{label}</span>}
-      <div className="space-y-3 rounded-3xl border border-white/12 bg-slate-950/45 p-3">
+      <div className="surface-subtle space-y-3 p-3">
         <div className="flex flex-wrap gap-2">
           {skills.map((skill) => (
             <span
               key={skill}
-              className="inline-flex items-center gap-2 rounded-full border border-brand/35 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+              className="chip chip-accent normal-case tracking-normal"
             >
               {skill}
               <button

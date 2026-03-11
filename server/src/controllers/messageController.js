@@ -46,10 +46,7 @@ export const sendMessage = async (req, res) => {
     const { matchId } = req.params;
     const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
     const attachmentFile = req.file;
-
-    if (!text && !attachmentFile) {
-      return res.status(400).json({ message: "Message text or attachment is required" });
-    }
+    const interviewId = typeof req.body?.interviewId === "string" ? req.body.interviewId.trim() : "";
 
     const match = await Match.findById(matchId);
     if (!match) {
@@ -70,6 +67,35 @@ export const sendMessage = async (req, res) => {
       text,
       readBy: [req.user._id]
     };
+
+    if (interviewId) {
+      if (req.user.userType !== "company" || match.company.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: "Only the matched company can attach interviews" });
+      }
+
+      const interview = match.interviews.id(interviewId);
+
+      if (!interview) {
+        return res.status(404).json({ message: "Interview not found" });
+      }
+
+      payload.interviewAttachment = {
+        interviewId: interview._id,
+        title: interview.title || "Interview",
+        jobTitle: interview.jobTitle || "",
+        companyName: interview.companyName || req.user.companyProfile?.companyName || "",
+        startAt: interview.startAt,
+        endAt: interview.endAt,
+        timezone: interview.timezone || "UTC",
+        location: interview.location || "",
+        notes: interview.notes || "",
+        status: interview.status || "scheduled"
+      };
+    }
+
+    if (!text && !attachmentFile && !payload.interviewAttachment) {
+      return res.status(400).json({ message: "Message text, attachment, or interviewId is required" });
+    }
 
     if (attachmentFile) {
       payload.attachment = {

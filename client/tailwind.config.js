@@ -3,18 +3,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: "rgb(56 189 248 / <alpha-value>)",
+        brand: "rgb(34 211 238 / <alpha-value>)",
         brandStrong: "rgb(14 165 233 / <alpha-value>)",
-        positive: "rgb(16 185 129 / <alpha-value>)",
+        brandHot: "rgb(59 130 246 / <alpha-value>)",
+        positive: "rgb(45 212 191 / <alpha-value>)",
         negative: "rgb(251 113 133 / <alpha-value>)"
       },
       fontFamily: {
-        display: ["Sora", "sans-serif"],
-        body: ["Manrope", "sans-serif"]
+        display: ["Poppins", "Inter", "sans-serif"],
+        body: ["Inter", "sans-serif"]
       },
       boxShadow: {
-        soft: "0 24px 48px -28px rgba(0, 0, 0, 0.75)",
-        glow: "0 24px 48px -28px rgba(56, 189, 248, 0.65)"
+        soft: "0 24px 48px -28px rgba(2, 6, 23, 0.9)",
+        glow: "0 20px 44px -24px rgba(6, 182, 212, 0.82)"
       }
     }
   },

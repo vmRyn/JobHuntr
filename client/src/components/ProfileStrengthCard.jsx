@@ -22,7 +22,7 @@ const ProfileStrengthCard = ({
   });
 
   return (
-    <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4">
+    <div className="surface-subtle p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile strength</p>
@@ -33,7 +33,7 @@ const ProfileStrengthCard = ({
         </span>
       </div>
 
-      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-950/70">
+      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-900/75">
         <div
           className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ${getMeterClassName(score)}`}
           style={{ width: `${score}%` }}
@@ -46,7 +46,7 @@ const ProfileStrengthCard = ({
           <ul className="space-y-1.5 text-sm text-slate-200">
             {nextActions.slice(0, 4).map((action) => (
               <li key={action} className="flex items-start gap-2">
-                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-sky-300" />
+                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand" />
                 <span>{action}</span>
               </li>
             ))}

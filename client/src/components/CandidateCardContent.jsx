@@ -24,7 +24,7 @@ const CandidateCardContent = ({ candidate }) => {
       </div>
 
       {industryField && (
-        <p className="rounded-2xl border border-positive/40 bg-positive/10 p-3 text-sm font-medium text-emerald-200">
+        <p className="surface-subtle border-positive/35 bg-positive/12 p-3 text-sm font-medium text-teal-100">
           Industry / Field: {industryField}
         </p>
       )}
@@ -35,7 +35,7 @@ const CandidateCardContent = ({ candidate }) => {
         {(profile.skills || []).map((skill) => (
           <span
             key={skill}
-            className="rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand"
+            className="chip chip-accent normal-case tracking-normal"
           >
             {skill}
           </span>
