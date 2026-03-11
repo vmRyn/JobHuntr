@@ -4,8 +4,11 @@ import DashboardShell from "../components/DashboardShell";
 import CandidateProfileSheet from "../components/CandidateProfileSheet";
 import CandidateCardContent from "../components/CandidateCardContent";
 import ChatWindow from "../components/ChatWindow";
+import InterviewScheduler from "../components/InterviewScheduler";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MatchList from "../components/MatchList";
+import PipelineBoard from "../components/PipelineBoard";
+import ProfileStrengthCard from "../components/ProfileStrengthCard";
 import SwipeCard from "../components/SwipeCard";
 import jobIndustryOptions from "../data/jobIndustryOptions";
 import Button from "../components/ui/Button";
@@ -53,6 +56,7 @@ const CompanyDashboard = () => {
   const [candidateDetailsOpen, setCandidateDetailsOpen] = useState(false);
   const [matchedProfileOpen, setMatchedProfileOpen] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [updatingStageMatchId, setUpdatingStageMatchId] = useState("");
   const [jobForm, setJobForm] = useState(defaultJobForm);
   const [profileForm, setProfileForm] = useState(createInitialProfile(user));
   const [profileFiles, setProfileFiles] = useState({ logo: null });
@@ -253,6 +257,29 @@ const CompanyDashboard = () => {
 
   const handleProfileFileChange = (file) => {
     setProfileFiles({ logo: file });
+  };
+
+  const handleStageChange = async (matchId, stage) => {
+    const currentMatch = matches.find((match) => match._id === matchId);
+    if (!currentMatch || (currentMatch.stage || "new") === stage) {
+      return;
+    }
+
+    setUpdatingStageMatchId(matchId);
+    setError("");
+    setNotice("");
+
+    try {
+      const { data } = await api.patch(`/matches/${matchId}/stage`, { stage });
+
+      setMatches((prev) => prev.map((match) => (match._id === matchId ? data : match)));
+      setSelectedMatch((prev) => (prev?._id === matchId ? data : prev));
+      setNotice(`Moved candidate to ${stage.charAt(0).toUpperCase() + stage.slice(1)}`);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to update candidate stage");
+    } finally {
+      setUpdatingStageMatchId("");
+    }
   };
 
   const handleSaveProfile = async (event) => {
@@ -510,54 +537,74 @@ const CompanyDashboard = () => {
   );
 
   const renderMatches = () => (
-    <Card className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Matches</p>
-          <h2 className="font-display text-2xl text-slate-50">Mutual candidates</h2>
+    <div className="space-y-3">
+      <Card className="space-y-4">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Hiring pipeline</p>
+          <h2 className="font-display text-2xl text-slate-50">Move talent by stage</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!selectedMatch}
-            onClick={() => setMatchedProfileOpen(true)}
-          >
-            View profile
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!selectedMatch}
-            onClick={() => setActiveTab("messages")}
-          >
-            Open chat
-          </Button>
-        </div>
-      </div>
 
-      <MatchList
-        matches={matches}
-        selectedMatchId={selectedMatch?._id}
-        onSelect={setSelectedMatch}
-        userType={user.userType}
-      />
+        <PipelineBoard
+          matches={matches}
+          selectedMatchId={selectedMatch?._id}
+          onSelectMatch={setSelectedMatch}
+          onStageChange={handleStageChange}
+          updatingMatchId={updatingStageMatchId}
+        />
+      </Card>
 
-      {selectedMatch && (
-        <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4">
-          <p className="text-base font-semibold text-slate-100">
-            {matchedCandidateProfile.name || "Candidate"}
-          </p>
-          <p className="mt-1 text-sm text-slate-300">
-            {matchedCandidateProfile.location || "Location not set"}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {matchedCandidateProfile.industryField && <span className="chip">{matchedCandidateProfile.industryField}</span>}
-            {selectedMatch.job?.title && <span className="chip">Matched for {selectedMatch.job.title}</span>}
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Matches</p>
+            <h2 className="font-display text-2xl text-slate-50">Mutual candidates</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!selectedMatch}
+              onClick={() => setMatchedProfileOpen(true)}
+            >
+              View profile
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!selectedMatch}
+              onClick={() => setActiveTab("messages")}
+            >
+              Open chat
+            </Button>
           </div>
         </div>
-      )}
-    </Card>
+
+        <MatchList
+          matches={matches}
+          selectedMatchId={selectedMatch?._id}
+          onSelect={setSelectedMatch}
+          userType={user.userType}
+        />
+
+        {selectedMatch && (
+          <div className="rounded-3xl border border-white/16 bg-slate-900/55 p-4">
+            <p className="text-base font-semibold text-slate-100">
+              {matchedCandidateProfile.name || "Candidate"}
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              {matchedCandidateProfile.location || "Location not set"}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="chip">Stage: {(selectedMatch.stage || "new").toUpperCase()}</span>
+              {matchedCandidateProfile.industryField && <span className="chip">{matchedCandidateProfile.industryField}</span>}
+              {selectedMatch.job?.title && <span className="chip">Matched for {selectedMatch.job.title}</span>}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <InterviewScheduler selectedMatch={selectedMatch} onNotice={setNotice} onError={setError} />
+    </div>
   );
 
   const renderMessages = () => (
@@ -597,6 +644,13 @@ const CompanyDashboard = () => {
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
         <h2 className="font-display text-2xl text-slate-50">Company details</h2>
       </div>
+
+      <ProfileStrengthCard
+        userType={user.userType}
+        companyProfile={profileForm}
+        jobsCount={jobs.length}
+        pendingFiles={{ logo: profileFiles.logo }}
+      />
 
       <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
         <InputField

@@ -11,7 +11,8 @@ export const uploadRoot = path.resolve(__dirname, "../../uploads");
 const uploadDirectories = {
   profilePicture: "profile-images",
   logo: "company-logos",
-  cv: "cvs"
+  cv: "cvs",
+  attachment: "chat-attachments"
 };
 
 const imageMimeTypes = new Set([
@@ -25,6 +26,14 @@ const cvMimeTypes = new Set([
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+]);
+
+const attachmentMimeTypes = new Set([
+  ...imageMimeTypes,
+  ...cvMimeTypes,
+  "text/plain",
+  "text/csv",
+  "application/zip"
 ]);
 
 const ensureUploadDirectory = (directory) => {
@@ -74,6 +83,14 @@ const fileFilter = (req, file, callback) => {
     return callback(null, true);
   }
 
+  if (file.fieldname === "attachment") {
+    if (!attachmentMimeTypes.has(file.mimetype)) {
+      return callback(new Error("Attachment type not supported"));
+    }
+
+    return callback(null, true);
+  }
+
   return callback(new Error("Unsupported upload field"));
 };
 
@@ -91,6 +108,24 @@ const multerUpload = multer({
 
 export const handleProfileUpload = (req, res, next) => {
   multerUpload(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({ message: error.message });
+    }
+
+    return next();
+  });
+};
+
+const messageAttachmentUpload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024
+  }
+}).single("attachment");
+
+export const handleMessageAttachmentUpload = (req, res, next) => {
+  messageAttachmentUpload(req, res, (error) => {
     if (error) {
       return res.status(400).json({ message: error.message });
     }

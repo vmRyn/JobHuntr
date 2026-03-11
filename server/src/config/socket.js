@@ -6,15 +6,24 @@ import User from "../models/User.js";
 
 let io;
 
+const userProjection =
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
+
 const isParticipant = (match, userId) =>
   match &&
   (match.seeker.toString() === userId.toString() ||
     match.company.toString() === userId.toString());
 
 export const setupSocket = (httpServer) => {
+  const allowedOrigins = [
+    process.env.CLIENT_URL,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ].filter(Boolean);
+
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL,
+      origin: allowedOrigins,
       credentials: true
     }
   });
@@ -55,6 +64,40 @@ export const setupSocket = (httpServer) => {
       }
     });
 
+    socket.on("typingStart", async ({ matchId }) => {
+      if (!matchId) {
+        return;
+      }
+
+      const match = await Match.findById(matchId);
+      if (!isParticipant(match, userId)) {
+        return;
+      }
+
+      socket.to(`match:${matchId}`).emit("typing", {
+        matchId,
+        userId,
+        isTyping: true
+      });
+    });
+
+    socket.on("typingStop", async ({ matchId }) => {
+      if (!matchId) {
+        return;
+      }
+
+      const match = await Match.findById(matchId);
+      if (!isParticipant(match, userId)) {
+        return;
+      }
+
+      socket.to(`match:${matchId}`).emit("typing", {
+        matchId,
+        userId,
+        isTyping: false
+      });
+    });
+
     socket.on("sendMessage", async (payload, callback) => {
       try {
         const { matchId, receiverId, text } = payload || {};
@@ -74,12 +117,13 @@ export const setupSocket = (httpServer) => {
           match: matchId,
           sender: userId,
           receiver: receiverId,
-          text: text.trim()
+          text: text.trim(),
+          readBy: [userId]
         });
 
         const populatedMessage = await Message.findById(message._id)
-          .populate("sender", "userType seekerProfile.name companyProfile.companyName")
-          .populate("receiver", "userType seekerProfile.name companyProfile.companyName");
+          .populate("sender", userProjection)
+          .populate("receiver", userProjection);
 
         io.to(`match:${matchId}`).emit("newMessage", populatedMessage);
         io.to(`user:${receiverId}`).emit("newMessage", populatedMessage);

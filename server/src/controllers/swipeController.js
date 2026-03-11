@@ -23,7 +23,7 @@ const createOrGetMatch = async (jobId, seekerId, companyId) => {
   );
 
   return Match.findById(match._id)
-    .populate("job", "title location salary requiredSkills")
+    .populate("job", "title industry location postcode salary requiredSkills")
     .populate("seeker", "userType seekerProfile")
     .populate("company", "userType companyProfile");
 };

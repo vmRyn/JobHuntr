@@ -1,4 +1,39 @@
 import Match from "../models/Match.js";
+import { getIO } from "../config/socket.js";
+
+const pipelineStages = new Set(["new", "screening", "interview", "offer"]);
+const interviewStatuses = new Set(["scheduled", "completed", "cancelled"]);
+
+const isParticipant = (match, userId) =>
+  match &&
+  (match.seeker.toString() === userId.toString() ||
+    match.company.toString() === userId.toString());
+
+const populateMatch = (query) =>
+  query
+    .populate("job", "title industry location postcode salary requiredSkills")
+    .populate("seeker", "userType seekerProfile")
+    .populate("company", "userType companyProfile")
+    .populate("interviews.createdBy", "userType seekerProfile.name companyProfile.companyName");
+
+const parseDateOrNull = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const emitMatchEvent = (eventName, payload) => {
+  try {
+    const io = getIO();
+    io.to(`match:${payload.matchId}`).emit(eventName, payload);
+  } catch (socketError) {
+    // Socket.io may not be available in some test contexts.
+  }
+};
 
 export const getMyMatches = async (req, res) => {
   try {
@@ -7,11 +42,7 @@ export const getMyMatches = async (req, res) => {
         ? { seeker: req.user._id }
         : { company: req.user._id };
 
-    const matches = await Match.find(query)
-      .populate("job", "title location salary requiredSkills")
-      .populate("seeker", "userType seekerProfile")
-      .populate("company", "userType companyProfile")
-      .sort({ updatedAt: -1 });
+    const matches = await populateMatch(Match.find(query).sort({ updatedAt: -1 }));
 
     return res.json(matches);
   } catch (error) {
@@ -43,5 +74,191 @@ export const getMatchedCandidateProfile = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to load candidate profile" });
+  }
+};
+
+export const updateMatchStage = async (req, res) => {
+  try {
+    if (req.user.userType !== "company") {
+      return res.status(403).json({ message: "Only companies can update match stages" });
+    }
+
+    const stage = typeof req.body?.stage === "string" ? req.body.stage.toLowerCase().trim() : "";
+
+    if (!pipelineStages.has(stage)) {
+      return res.status(400).json({ message: "Invalid stage" });
+    }
+
+    const match = await Match.findOne({
+      _id: req.params.matchId,
+      company: req.user._id
+    });
+
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    match.stage = stage;
+    await match.save();
+
+    const populatedMatch = await populateMatch(Match.findById(match._id));
+
+    emitMatchEvent("matchStageUpdated", {
+      matchId: match._id.toString(),
+      stage,
+      updatedBy: req.user._id.toString()
+    });
+
+    return res.json(populatedMatch);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update match stage" });
+  }
+};
+
+export const getMatchInterviews = async (req, res) => {
+  try {
+    const match = await populateMatch(Match.findById(req.params.matchId));
+
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (!isParticipant(match, req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const interviews = [...(match.interviews || [])].sort(
+      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+    );
+
+    return res.json(interviews);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to load interviews" });
+  }
+};
+
+export const createMatchInterview = async (req, res) => {
+  try {
+    const match = await Match.findById(req.params.matchId);
+
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (!isParticipant(match, req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const title = typeof req.body?.title === "string" && req.body.title.trim() ? req.body.title.trim() : "Interview";
+    const startAt = parseDateOrNull(req.body?.startAt);
+    const endAt = parseDateOrNull(req.body?.endAt);
+    const timezone = typeof req.body?.timezone === "string" && req.body.timezone.trim() ? req.body.timezone.trim() : "UTC";
+    const location = typeof req.body?.location === "string" ? req.body.location.trim() : "";
+    const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+
+    if (!startAt || !endAt) {
+      return res.status(400).json({ message: "startAt and endAt are required" });
+    }
+
+    if (startAt >= endAt) {
+      return res.status(400).json({ message: "endAt must be after startAt" });
+    }
+
+    match.interviews.push({
+      title,
+      startAt,
+      endAt,
+      timezone,
+      location,
+      notes,
+      status: "scheduled",
+      createdBy: req.user._id
+    });
+
+    const interviewId = match.interviews[match.interviews.length - 1]._id.toString();
+    await match.save();
+
+    const populatedMatch = await populateMatch(Match.findById(match._id));
+    const interview = populatedMatch.interviews.id(interviewId);
+
+    emitMatchEvent("interviewCreated", {
+      matchId: match._id.toString(),
+      interview
+    });
+
+    return res.status(201).json(interview);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to schedule interview" });
+  }
+};
+
+export const updateMatchInterview = async (req, res) => {
+  try {
+    const match = await Match.findById(req.params.matchId);
+
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (!isParticipant(match, req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const interview = match.interviews.id(req.params.interviewId);
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+
+    if (typeof req.body?.title === "string" && req.body.title.trim()) {
+      interview.title = req.body.title.trim();
+    }
+
+    if (typeof req.body?.location === "string") {
+      interview.location = req.body.location.trim();
+    }
+
+    if (typeof req.body?.notes === "string") {
+      interview.notes = req.body.notes.trim();
+    }
+
+    if (typeof req.body?.timezone === "string" && req.body.timezone.trim()) {
+      interview.timezone = req.body.timezone.trim();
+    }
+
+    const nextStartAt = req.body?.startAt ? parseDateOrNull(req.body.startAt) : interview.startAt;
+    const nextEndAt = req.body?.endAt ? parseDateOrNull(req.body.endAt) : interview.endAt;
+
+    if (!nextStartAt || !nextEndAt) {
+      return res.status(400).json({ message: "Invalid interview date values" });
+    }
+
+    if (nextStartAt >= nextEndAt) {
+      return res.status(400).json({ message: "endAt must be after startAt" });
+    }
+
+    interview.startAt = nextStartAt;
+    interview.endAt = nextEndAt;
+
+    if (typeof req.body?.status === "string") {
+      const nextStatus = req.body.status.toLowerCase().trim();
+      if (!interviewStatuses.has(nextStatus)) {
+        return res.status(400).json({ message: "Invalid interview status" });
+      }
+      interview.status = nextStatus;
+    }
+
+    await match.save();
+
+    const populatedMatch = await populateMatch(Match.findById(match._id));
+    const updatedInterview = populatedMatch.interviews.id(req.params.interviewId);
+
+    emitMatchEvent("interviewUpdated", {
+      matchId: match._id.toString(),
+      interview: updatedInterview
+    });
+
+    return res.json(updatedInterview);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update interview" });
   }
 };

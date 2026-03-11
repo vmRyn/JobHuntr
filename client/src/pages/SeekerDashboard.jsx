@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import ChatWindow from "../components/ChatWindow";
+import InterviewScheduler from "../components/InterviewScheduler";
 import JobCardContent from "../components/JobCardContent";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MatchList from "../components/MatchList";
+import ProfileStrengthCard from "../components/ProfileStrengthCard";
 import SwipeCard from "../components/SwipeCard";
 import industryOptions from "../data/industryOptions";
 import jobIndustryOptions from "../data/jobIndustryOptions";
@@ -323,29 +325,33 @@ const SeekerDashboard = () => {
   );
 
   const renderMatches = () => (
-    <Card className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Matches</p>
-          <h2 className="font-display text-2xl text-slate-50">Mutual interest</h2>
+    <div className="space-y-3">
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Matches</p>
+            <h2 className="font-display text-2xl text-slate-50">Mutual interest</h2>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!selectedMatch}
+            onClick={() => setActiveTab("messages")}
+          >
+            Open chat
+          </Button>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={!selectedMatch}
-          onClick={() => setActiveTab("messages")}
-        >
-          Open chat
-        </Button>
-      </div>
 
-      <MatchList
-        matches={matches}
-        selectedMatchId={selectedMatch?._id}
-        onSelect={setSelectedMatch}
-        userType={user.userType}
-      />
-    </Card>
+        <MatchList
+          matches={matches}
+          selectedMatchId={selectedMatch?._id}
+          onSelect={setSelectedMatch}
+          userType={user.userType}
+        />
+      </Card>
+
+      <InterviewScheduler selectedMatch={selectedMatch} onNotice={setNotice} onError={setError} />
+    </div>
   );
 
   const renderMessages = () => (
@@ -372,6 +378,15 @@ const SeekerDashboard = () => {
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
         <h2 className="font-display text-2xl text-slate-50">Your candidate card</h2>
       </div>
+
+      <ProfileStrengthCard
+        userType={user.userType}
+        seekerProfile={profileForm}
+        pendingFiles={{
+          profilePicture: profileFiles.profilePicture,
+          cv: profileFiles.cv
+        }}
+      />
 
       <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
         <InputField

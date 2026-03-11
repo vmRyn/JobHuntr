@@ -6,6 +6,7 @@ import LoadingSpinner from "./LoadingSpinner";
 import { getAssetUrl } from "../utils/assets";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+const reactionOptions = ["👍", "❤️", "🎉", "🔥", "👀"];
 
 const extractId = (value) => {
   if (!value) return "";
@@ -26,6 +27,42 @@ const getProfileImage = (user) => {
 };
 
 const getInitial = (name = "") => name.trim().charAt(0).toUpperCase() || "?";
+
+const hasBeenReadBy = (message, userId) =>
+  Array.isArray(message?.readBy) && message.readBy.some((item) => extractId(item) === userId);
+
+const buildReactionSummary = (reactions = [], currentUserId) => {
+  const grouped = new Map();
+
+  reactions.forEach((reaction) => {
+    const emoji = reaction?.emoji;
+    if (!emoji) return;
+
+    const existing = grouped.get(emoji) || {
+      emoji,
+      count: 0,
+      mine: false
+    };
+
+    existing.count += 1;
+    if (extractId(reaction?.user) === currentUserId) {
+      existing.mine = true;
+    }
+
+    grouped.set(emoji, existing);
+  });
+
+  return Array.from(grouped.values());
+};
+
+const formatFileSize = (size = 0) => {
+  if (!size) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const isImageAttachment = (attachment) => attachment?.mimeType?.startsWith("image/");
 
 const formatTimestamp = (value) => {
   if (!value) return "";
@@ -57,11 +94,18 @@ const getSenderLabel = (message, currentUserId, fallbackName) => {
 const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [reactingMessageId, setReactingMessageId] = useState("");
+  const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const [error, setError] = useState("");
   const socketRef = useRef(null);
   const endRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const isTypingRef = useRef(false);
+  const lastReadSyncRef = useRef(0);
 
   const selectedMatchId = selectedMatch?._id;
 
@@ -73,6 +117,60 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
 
   const counterpartName = getName(counterpart);
   const counterpartImage = getProfileImage(counterpart);
+  const counterpartId = extractId(counterpart);
+
+  const markMessagesRead = async (force = false) => {
+    if (!selectedMatchId || !currentUser?._id) return;
+
+    const now = Date.now();
+    if (!force && now - lastReadSyncRef.current < 800) {
+      return;
+    }
+
+    lastReadSyncRef.current = now;
+
+    try {
+      const { data } = await api.post(`/messages/${selectedMatchId}/read`);
+      const messageIds = data?.messageIds || [];
+
+      if (!messageIds.length) {
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (!messageIds.includes(message._id)) {
+            return message;
+          }
+
+          const nextReadBy = Array.isArray(message.readBy) ? [...message.readBy] : [];
+          const alreadyRead = nextReadBy.some((item) => extractId(item) === currentUser._id);
+          if (!alreadyRead) {
+            nextReadBy.push(currentUser._id);
+          }
+
+          return {
+            ...message,
+            readBy: nextReadBy
+          };
+        })
+      );
+    } catch (requestError) {
+      // Read receipts are best-effort and should not block chat interaction.
+    }
+  };
+
+  const stopTyping = () => {
+    window.clearTimeout(typingTimeoutRef.current);
+
+    if (!isTypingRef.current || !socketRef.current || !selectedMatchId) {
+      isTypingRef.current = false;
+      return;
+    }
+
+    socketRef.current.emit("typingStop", { matchId: selectedMatchId });
+    isTypingRef.current = false;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("jobhuntr_token");
@@ -98,18 +196,91 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         }
         return [...prev, message];
       });
+
+      if (extractId(message.receiver) === currentUser?._id) {
+        markMessagesRead();
+      }
+    };
+
+    const onTyping = (payload) => {
+      if (!payload || payload.matchId !== selectedMatchId) {
+        return;
+      }
+
+      if (payload.userId !== counterpartId) {
+        return;
+      }
+
+      setIsCounterpartTyping(Boolean(payload.isTyping));
+    };
+
+    const onMessagesRead = (payload) => {
+      if (!payload || payload.matchId !== selectedMatchId) {
+        return;
+      }
+
+      const readUserId = payload.userId;
+      const readMessageIds = payload.messageIds || [];
+      if (!readUserId || !readMessageIds.length) {
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (!readMessageIds.includes(message._id)) {
+            return message;
+          }
+
+          const nextReadBy = Array.isArray(message.readBy) ? [...message.readBy] : [];
+          const alreadyRead = nextReadBy.some((item) => extractId(item) === readUserId);
+
+          if (!alreadyRead) {
+            nextReadBy.push(readUserId);
+          }
+
+          return {
+            ...message,
+            readBy: nextReadBy
+          };
+        })
+      );
+    };
+
+    const onMessageReactionUpdated = (payload) => {
+      if (!payload || payload.matchId !== selectedMatchId || !payload.message?._id) {
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((message) => (message._id === payload.message._id ? payload.message : message))
+      );
     };
 
     socket.on("newMessage", onNewMessage);
+    socket.on("typing", onTyping);
+    socket.on("messagesRead", onMessagesRead);
+    socket.on("messageReactionUpdated", onMessageReactionUpdated);
 
     return () => {
       socket.off("newMessage", onNewMessage);
+      socket.off("typing", onTyping);
+      socket.off("messagesRead", onMessagesRead);
+      socket.off("messageReactionUpdated", onMessageReactionUpdated);
     };
-  }, [selectedMatchId]);
+  }, [counterpartId, currentUser?._id, selectedMatchId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, selectedMatchId]);
+  }, [isCounterpartTyping, messages, selectedMatchId]);
+
+  useEffect(() => {
+    setAttachmentFile(null);
+    setIsCounterpartTyping(false);
+    stopTyping();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [selectedMatchId]);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -128,6 +299,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         if (socketRef.current) {
           socketRef.current.emit("joinMatch", selectedMatchId);
         }
+
+        markMessagesRead(true);
       } catch (requestError) {
         setError(requestError.response?.data?.message || "Failed to load messages");
       } finally {
@@ -138,19 +311,71 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
     loadMessages();
   }, [selectedMatchId]);
 
-  const handleSendMessage = async (event) => {
-    event.preventDefault();
+  const handleDraftChange = (event) => {
+    const value = event.target.value;
+    setDraft(value);
 
-    if (!selectedMatchId || !draft.trim() || sending) {
+    if (!socketRef.current || !selectedMatchId) {
       return;
     }
 
+    if (value.trim()) {
+      if (!isTypingRef.current) {
+        socketRef.current.emit("typingStart", { matchId: selectedMatchId });
+        isTypingRef.current = true;
+      }
+
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = window.setTimeout(() => {
+        stopTyping();
+      }, 1200);
+      return;
+    }
+
+    stopTyping();
+  };
+
+  const handleAttachmentPick = (event) => {
+    const file = event.target.files?.[0] || null;
+    setAttachmentFile(file);
+  };
+
+  const handleRemoveAttachment = () => {
+    setAttachmentFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleSendMessage = async (event) => {
+    event.preventDefault();
+    const messageText = draft.trim();
+
+    if (!selectedMatchId || sending || (!messageText && !attachmentFile)) {
+      return;
+    }
+
+    stopTyping();
     setSending(true);
     setError("");
 
     try {
-      const { data } = await api.post(`/messages/${selectedMatchId}`, { text: draft });
+      const hasAttachment = Boolean(attachmentFile);
+      const payload = hasAttachment ? new FormData() : { text: messageText };
+
+      if (hasAttachment) {
+        if (messageText) {
+          payload.append("text", messageText);
+        }
+        payload.append("attachment", attachmentFile);
+      }
+
+      const { data } = await api.post(`/messages/${selectedMatchId}`, payload);
       setDraft("");
+      setAttachmentFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       setMessages((prev) => {
         if (prev.some((item) => item._id === data._id)) {
           return prev;
@@ -161,6 +386,27 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       setError(requestError.response?.data?.message || "Failed to send message");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleToggleReaction = async (messageId, emoji) => {
+    if (!messageId || !emoji || reactingMessageId) {
+      return;
+    }
+
+    setReactingMessageId(messageId);
+
+    try {
+      const { data } = await api.post(`/messages/${messageId}/reactions`, { emoji });
+      if (data?.message?._id) {
+        setMessages((prev) =>
+          prev.map((message) => (message._id === data.message._id ? data.message : message))
+        );
+      }
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to update reaction");
+    } finally {
+      setReactingMessageId("");
     }
   };
 
@@ -209,6 +455,14 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
             const mine = extractId(message.sender) === currentUser?._id;
             const senderLabel = getSenderLabel(message, currentUser?._id, counterpartName);
             const timestamp = formatTimestamp(message.createdAt);
+            const reactionSummary = buildReactionSummary(message.reactions, currentUser?._id);
+            const attachment = message.attachment;
+            const attachmentUrl = getAssetUrl(attachment?.url);
+            const messageStatus = mine
+              ? hasBeenReadBy(message, counterpartId)
+                ? "Seen"
+                : "Sent"
+              : "";
 
             return (
               <div key={message._id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
@@ -221,6 +475,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                     <span className="font-semibold tracking-wide">{senderLabel}</span>
                     {timestamp && <span aria-hidden>•</span>}
                     {timestamp && <time dateTime={message.createdAt}>{timestamp}</time>}
+                    {messageStatus && <span aria-hidden>•</span>}
+                    {messageStatus && <span>{messageStatus}</span>}
                   </div>
 
                   <div
@@ -230,25 +486,112 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                         : "border border-white/18 bg-white/12 text-slate-100"
                     }`}
                   >
-                    {message.text}
+                    {message.text && <p>{message.text}</p>}
+
+                    {attachmentUrl && (
+                      <div className={message.text ? "mt-2" : ""}>
+                        {isImageAttachment(attachment) ? (
+                          <a href={attachmentUrl} target="_blank" rel="noreferrer">
+                            <img
+                              src={attachmentUrl}
+                              alt={attachment.originalName || "Attachment"}
+                              className="max-h-44 rounded-xl border border-white/20 object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center rounded-xl border border-white/30 bg-white/12 px-3 py-2 text-xs font-semibold text-slate-50 hover:bg-white/20"
+                          >
+                            {attachment.originalName || "Attachment"}
+                            {attachment.size ? ` (${formatFileSize(attachment.size)})` : ""}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
+                    {reactionSummary.map((reaction) => (
+                      <button
+                        key={`${message._id}-${reaction.emoji}`}
+                        type="button"
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                          reaction.mine
+                            ? "border-sky-300/60 bg-sky-500/25 text-sky-100"
+                            : "border-white/25 bg-white/10 text-slate-100"
+                        }`}
+                        onClick={() => handleToggleReaction(message._id, reaction.emoji)}
+                        disabled={reactingMessageId === message._id}
+                      >
+                        {reaction.emoji} {reaction.count}
+                      </button>
+                    ))}
+
+                    {reactionOptions.map((emoji) => (
+                      <button
+                        key={`${message._id}-quick-${emoji}`}
+                        type="button"
+                        className="rounded-full border border-white/18 bg-slate-900/55 px-1.5 py-0.5 text-[11px] text-slate-200 hover:border-sky-300/55"
+                        onClick={() => handleToggleReaction(message._id, emoji)}
+                        disabled={reactingMessageId === message._id}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
             );
           })}
+
+          {isCounterpartTyping && (
+            <p className="text-xs font-medium text-sky-200">{counterpartName} is typing...</p>
+          )}
+
           <div ref={endRef} />
+        </div>
+      )}
+
+      {attachmentFile && (
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-white/20 bg-slate-900/55 px-3 py-2 text-xs text-slate-100">
+          <span className="truncate">
+            Attached: {attachmentFile.name} ({formatFileSize(attachmentFile.size)})
+          </span>
+          <button
+            type="button"
+            className="rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:border-sky-300/60"
+            onClick={handleRemoveAttachment}
+          >
+            Remove
+          </button>
         </div>
       )}
 
       <form onSubmit={handleSendMessage} className="flex gap-2">
         <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleAttachmentPick}
+          accept="image/*,.pdf,.doc,.docx,.txt,.csv,.zip"
+        />
+
+        <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+          Attach
+        </Button>
+
+        <input
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={handleDraftChange}
           placeholder="Send a message"
           aria-label="Message text"
           className="field-control"
         />
-        <Button type="submit" disabled={sending}>
+
+        <Button type="submit" disabled={sending || (!draft.trim() && !attachmentFile)}>
           {sending ? "..." : "Send"}
         </Button>
       </form>

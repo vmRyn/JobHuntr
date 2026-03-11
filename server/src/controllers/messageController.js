@@ -1,11 +1,22 @@
 import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import { getIO } from "../config/socket.js";
+import { toPublicUploadPath } from "../middleware/upload.js";
 
 const isParticipant = (match, userId) =>
   match &&
   (match.seeker.toString() === userId.toString() ||
     match.company.toString() === userId.toString());
+
+const validReactions = new Set(["👍", "❤️", "🎉", "🔥", "👏", "👀"]);
+
+const userProjection =
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
+
+const populateMessage = (query) =>
+  query
+    .populate("sender", userProjection)
+    .populate("receiver", userProjection);
 
 export const getMessagesByMatchId = async (req, res) => {
   try {
@@ -20,10 +31,9 @@ export const getMessagesByMatchId = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const messages = await Message.find({ match: matchId })
-      .sort({ createdAt: 1 })
-      .populate("sender", "userType seekerProfile.name companyProfile.companyName")
-      .populate("receiver", "userType seekerProfile.name companyProfile.companyName");
+    const messages = await populateMessage(
+      Message.find({ match: matchId }).sort({ createdAt: 1 })
+    );
 
     return res.json(messages);
   } catch (error) {
@@ -34,10 +44,11 @@ export const getMessagesByMatchId = async (req, res) => {
 export const sendMessage = async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { text } = req.body;
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    const attachmentFile = req.file;
 
-    if (!text?.trim()) {
-      return res.status(400).json({ message: "Message text is required" });
+    if (!text && !attachmentFile) {
+      return res.status(400).json({ message: "Message text or attachment is required" });
     }
 
     const match = await Match.findById(matchId);
@@ -52,16 +63,26 @@ export const sendMessage = async (req, res) => {
     const receiverId =
       match.seeker.toString() === req.user._id.toString() ? match.company : match.seeker;
 
-    const message = await Message.create({
+    const payload = {
       match: matchId,
       sender: req.user._id,
       receiver: receiverId,
-      text: text.trim()
-    });
+      text,
+      readBy: [req.user._id]
+    };
 
-    const populatedMessage = await Message.findById(message._id)
-      .populate("sender", "userType seekerProfile.name companyProfile.companyName")
-      .populate("receiver", "userType seekerProfile.name companyProfile.companyName");
+    if (attachmentFile) {
+      payload.attachment = {
+        url: toPublicUploadPath(attachmentFile.path),
+        originalName: attachmentFile.originalname,
+        mimeType: attachmentFile.mimetype,
+        size: attachmentFile.size
+      };
+    }
+
+    const message = await Message.create(payload);
+
+    const populatedMessage = await populateMessage(Message.findById(message._id));
 
     try {
       const io = getIO();
@@ -74,5 +95,121 @@ export const sendMessage = async (req, res) => {
     return res.status(201).json(populatedMessage);
   } catch (error) {
     return res.status(500).json({ message: "Failed to send message" });
+  }
+};
+
+export const markMessagesAsRead = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+
+    const match = await Match.findById(matchId);
+    if (!match) {
+      return res.status(404).json({ message: "Match not found" });
+    }
+
+    if (!isParticipant(match, req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const unreadMessages = await Message.find({
+      match: matchId,
+      receiver: req.user._id,
+      readBy: { $ne: req.user._id }
+    }).select("_id");
+
+    const messageIds = unreadMessages.map((message) => message._id);
+
+    if (messageIds.length > 0) {
+      await Message.updateMany(
+        { _id: { $in: messageIds } },
+        { $addToSet: { readBy: req.user._id } }
+      );
+
+      try {
+        const io = getIO();
+        io.to(`match:${matchId}`).emit("messagesRead", {
+          matchId,
+          userId: req.user._id.toString(),
+          messageIds: messageIds.map((id) => id.toString())
+        });
+      } catch (socketError) {
+        // Socket.io may not be available in some test contexts.
+      }
+    }
+
+    return res.json({
+      updatedCount: messageIds.length,
+      messageIds: messageIds.map((id) => id.toString())
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to mark messages as read" });
+  }
+};
+
+export const toggleMessageReaction = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const emoji = typeof req.body?.emoji === "string" ? req.body.emoji.trim() : "";
+
+    if (!validReactions.has(emoji)) {
+      return res.status(400).json({ message: "Unsupported reaction emoji" });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const match = await Match.findById(message.match);
+    if (!isParticipant(match, req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const userId = req.user._id.toString();
+    const existingIndex = message.reactions.findIndex(
+      (reaction) => reaction.user.toString() === userId
+    );
+
+    let action = "added";
+
+    if (existingIndex >= 0) {
+      const existingReaction = message.reactions[existingIndex];
+
+      if (existingReaction.emoji === emoji) {
+        message.reactions.splice(existingIndex, 1);
+        action = "removed";
+      } else {
+        existingReaction.emoji = emoji;
+        existingReaction.createdAt = new Date();
+        action = "updated";
+      }
+    } else {
+      message.reactions.push({
+        user: req.user._id,
+        emoji,
+        createdAt: new Date()
+      });
+    }
+
+    await message.save();
+
+    const populatedMessage = await populateMessage(Message.findById(message._id));
+
+    try {
+      const io = getIO();
+      io.to(`match:${message.match.toString()}`).emit("messageReactionUpdated", {
+        matchId: message.match.toString(),
+        action,
+        userId,
+        emoji,
+        message: populatedMessage
+      });
+    } catch (socketError) {
+      // Socket.io may not be available in some test contexts.
+    }
+
+    return res.json({ action, message: populatedMessage });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update reaction" });
   }
 };
