@@ -1,4 +1,5 @@
 import { getAssetUrl } from "../utils/assets";
+import VerifiedBadge from "./ui/VerifiedBadge";
 
 const getCounterpartName = (match, userType) => {
   if (userType === "seeker") {
@@ -17,6 +18,9 @@ const getCounterpartImage = (match, userType) => {
 
 const getCounterpartInitial = (name = "") => name.trim().charAt(0).toUpperCase() || "?";
 
+const isVerifiedCompanyCounterpart = (match, userType) =>
+  userType === "seeker" && Boolean(match.company?.companyProfile?.isVerified);
+
 const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
   if (!matches.length) {
     return (
@@ -32,12 +36,13 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
         const selected = selectedMatchId === match._id;
         const counterpartName = getCounterpartName(match, userType);
         const counterpartImage = getCounterpartImage(match, userType);
+        const verified = isVerifiedCompanyCounterpart(match, userType);
 
         return (
           <button
             key={match._id}
             type="button"
-            aria-label={`${counterpartName}${selected ? ", selected" : ""}`}
+            aria-label={`${counterpartName}${verified ? ", verified" : ""}${selected ? ", selected" : ""}`}
             onClick={() => onSelect(match)}
             className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-brandStrong/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
               selected
@@ -59,7 +64,10 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-50">{counterpartName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-slate-50">{counterpartName}</p>
+                  {verified && <VerifiedBadge compact />}
+                </div>
                 <p className="mt-1 truncate text-xs text-slate-300">{match.job?.title || "Open role"}</p>
               </div>
 

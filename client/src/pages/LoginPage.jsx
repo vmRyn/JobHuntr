@@ -25,7 +25,9 @@ const LoginPage = () => {
 
     try {
       const user = await login(form);
-      navigate(user.userType === "company" ? "/company" : "/seeker");
+      navigate(
+        user.userType === "company" ? "/company" : user.userType === "admin" ? "/admin" : "/seeker"
+      );
     } catch (requestError) {
       setError(requestError.response?.data?.message || "Login failed");
     } finally {

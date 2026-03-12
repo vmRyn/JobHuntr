@@ -1,9 +1,11 @@
 import { getAssetUrl } from "../utils/assets";
+import VerifiedBadge from "./ui/VerifiedBadge";
 
 const JobCardContent = ({ job }) => {
   const companyName = job.company?.companyProfile?.companyName || "Company";
   const companyIndustry = job.company?.companyProfile?.industry || "Industry not set";
   const companyLogo = getAssetUrl(job.company?.companyProfile?.logo);
+  const companyVerified = Boolean(job.company?.companyProfile?.isVerified);
   const jobIndustry = job.industry || companyIndustry;
 
   return (
@@ -22,7 +24,10 @@ const JobCardContent = ({ job }) => {
             </div>
           )}
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">{companyName}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">{companyName}</p>
+              {companyVerified && <VerifiedBadge compact />}
+            </div>
             <p className="text-sm text-slate-200">{jobIndustry}</p>
           </div>
         </div>

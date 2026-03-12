@@ -7,7 +7,7 @@ const getJobPopulate = () => ({
   select: "title description salary industry location postcode requiredSkills isActive company",
   populate: {
     path: "company",
-    select: "companyProfile.companyName companyProfile.logo companyProfile.industry"
+    select: "companyProfile.companyName companyProfile.logo companyProfile.industry companyProfile.isVerified"
   }
 });
 

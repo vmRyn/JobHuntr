@@ -6,7 +6,7 @@ import { getIO } from "../config/socket.js";
 const pipelineStages = new Set(["new", "screening", "interview", "offer"]);
 const interviewStatuses = new Set(["scheduled", "completed", "cancelled"]);
 const messageUserProjection =
-  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo companyProfile.isVerified";
 
 const isParticipant = (match, userId) =>
   match &&

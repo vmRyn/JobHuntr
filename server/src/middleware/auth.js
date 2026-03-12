@@ -18,6 +18,14 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    if (user.isSuspended) {
+      return res.status(403).json({
+        message: user.suspensionReason
+          ? `Account suspended: ${user.suspensionReason}`
+          : "Account suspended"
+      });
+    }
+
     req.user = attachProfileCompletion(user);
     next();
   } catch (error) {

@@ -121,6 +121,14 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    if (user.isSuspended) {
+      return res.status(403).json({
+        message: user.suspensionReason
+          ? `Account suspended: ${user.suspensionReason}`
+          : "Account suspended"
+      });
+    }
+
     const safeUser = await User.findById(user._id).select("-password");
 
     return res.json({

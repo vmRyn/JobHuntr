@@ -62,6 +62,13 @@ export const getProfileCompletionState = (user) => {
     };
   }
 
+  if (user.userType === "admin") {
+    return {
+      profileCompleted: true,
+      missingProfileFields: []
+    };
+  }
+
   const checks =
     user.userType === "company"
       ? companyChecks(user.companyProfile)

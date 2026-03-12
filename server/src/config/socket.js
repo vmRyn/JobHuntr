@@ -8,7 +8,7 @@ import { attachProfileCompletion, getProfileCompletionState } from "../utils/pro
 let io;
 
 const userProjection =
-  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo companyProfile.isVerified";
 
 const isParticipant = (match, userId) =>
   match &&

@@ -3,6 +3,9 @@ import { useAuth } from "../context/AuthContext";
 
 const getDisplayName = (user) => {
   if (!user) return "";
+  if (user.userType === "admin") {
+    return user.adminProfile?.name || "Admin";
+  }
   if (user.userType === "company") {
     return user.companyProfile?.companyName || "Company";
   }
@@ -18,7 +21,8 @@ const Navbar = () => {
     navigate("/login");
   };
 
-  const dashboardPath = user?.userType === "company" ? "/company" : "/seeker";
+  const dashboardPath =
+    user?.userType === "company" ? "/company" : user?.userType === "admin" ? "/admin" : "/seeker";
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/78 backdrop-blur-2xl">

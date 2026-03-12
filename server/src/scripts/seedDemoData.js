@@ -12,6 +12,8 @@ dotenv.config();
 
 const COMPANY_PASSWORD = "DemoCompany123!";
 const SEEKER_PASSWORD = "DemoSeeker123!";
+const ADMIN_EMAIL = "admin@demo.jobhuntr.local";
+const ADMIN_PASSWORD = "DemoAdmin123!";
 
 const createPoint = (lng, lat) => ({
   type: "Point",
@@ -340,6 +342,16 @@ const seedSeekers = async () => {
   return seekers;
 };
 
+const seedAdmin = async () =>
+  User.create({
+    userType: "admin",
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+    adminProfile: {
+      name: "Demo Admin"
+    }
+  });
+
 const seedDemoMatches = async (seededCompanies, seededSeekers) => {
   const pairings = [
     { companyIndex: 0, jobIndex: 0, seekerIndex: 0, stage: "screening" },
@@ -386,6 +398,9 @@ const seedDemoMatches = async (seededCompanies, seededSeekers) => {
 };
 
 const printCredentials = () => {
+  console.log("\nDemo admin account:");
+  console.log(`- Demo Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+
   console.log("\nDemo company accounts (password is shared):");
   companySeeds.forEach((companySeed) => {
     console.log(`- ${companySeed.companyProfile.companyName}: ${companySeed.email} / ${COMPANY_PASSWORD}`);
@@ -399,6 +414,7 @@ const printCredentials = () => {
 
 const main = async () => {
   const demoEmails = [
+    ADMIN_EMAIL,
     ...companySeeds.map((companySeed) => companySeed.email),
     ...seekerSeeds.map((seekerSeed) => seekerSeed.email)
   ];
@@ -408,6 +424,7 @@ const main = async () => {
 
   const seededCompanies = await seedCompaniesAndJobs();
   const seededSeekers = await seedSeekers();
+  await seedAdmin();
   await seedDemoMatches(seededCompanies, seededSeekers);
 
   const totalJobs = seededCompanies.reduce((count, entry) => count + entry.jobs.length, 0);

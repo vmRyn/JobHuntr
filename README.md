@@ -34,6 +34,8 @@ JobHuntr is a swipe-first hiring platform inspired by Tinder-style interactions.
 - Industry/Field profile metadata
 - Company job CRUD with required industry and postcode
 - Postcode radius and industry filters for seeker discovery
+- Admin moderation dashboard with company verification and job controls
+- Verified company badge for trusted employers in seeker-facing views
 
 ## Tech Stack
 
@@ -144,6 +146,7 @@ JobHuntr/
 - npm run dev: Start backend with nodemon
 - npm start: Start backend with node
 - npm run seed:demo: Seed demo companies, seekers, jobs, and matches
+- npm run admin:create: Create or update an admin account using ADMIN_EMAIL and ADMIN_PASSWORD
 
 ### client
 - npm run dev: Start Vite dev server
@@ -185,6 +188,14 @@ Base path: /api
    - GET /notifications
    - PATCH /notifications/:notificationId/read
    - PATCH /notifications/read-all
+- Admin (admin role only)
+   - GET /admin/overview
+   - GET /admin/companies
+   - PATCH /admin/companies/:companyId/verification
+   - PATCH /admin/users/:userId/suspension
+   - GET /admin/jobs
+   - PATCH /admin/jobs/:jobId/status
+   - GET /admin/audit-logs
 
 See API_EXAMPLES.md for request examples.
 
@@ -214,10 +225,18 @@ npm run seed:demo
 ```
 
 This creates:
+- 1 demo admin account
 - 4 demo company accounts
 - 3 demo seeker accounts
 - 12 demo jobs (3 per company)
 - demo matches and swipe records for interview scheduling tests
+
+Admins are provisioned by seed/script and cannot be created through the public signup flow.
+
+### Demo Admin Credentials
+
+- Demo Admin: `admin@demo.jobhuntr.local`
+- Password: `DemoAdmin123!`
 
 ### Demo Company Credentials
 

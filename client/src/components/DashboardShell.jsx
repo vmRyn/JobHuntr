@@ -6,6 +6,9 @@ import Button from "./ui/Button";
 
 const getUserLabel = (user) => {
   if (!user) return "";
+  if (user.userType === "admin") {
+    return user.adminProfile?.name || "Admin";
+  }
   if (user.userType === "company") {
     return user.companyProfile?.companyName || "Company";
   }

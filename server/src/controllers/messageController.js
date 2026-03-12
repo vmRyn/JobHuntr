@@ -11,7 +11,7 @@ const isParticipant = (match, userId) =>
 const validReactions = new Set(["👍", "❤️", "🎉", "🔥", "👏", "👀"]);
 
 const userProjection =
-  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo";
+  "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo companyProfile.isVerified";
 
 const populateMessage = (query) =>
   query

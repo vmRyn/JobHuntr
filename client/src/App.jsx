@@ -3,6 +3,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
 import { useAuth } from "./context/AuthContext";
 import CompanyDashboard from "./pages/CompanyDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -15,12 +16,16 @@ const DashboardRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
+  if (user.userType === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
   return <Navigate to={user.userType === "company" ? "/company" : "/seeker"} replace />;
 };
 
 const App = () => {
   const location = useLocation();
-  const hideNavbar = ["/seeker", "/company"].some((route) => location.pathname.startsWith(route));
+  const hideNavbar = ["/seeker", "/company", "/admin"].some((route) => location.pathname.startsWith(route));
 
   return (
     <div className="min-h-screen">
@@ -51,6 +56,14 @@ const App = () => {
           element={
             <ProtectedRoute requiredRole="company">
               <CompanyDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
             </ProtectedRoute>
           }
         />

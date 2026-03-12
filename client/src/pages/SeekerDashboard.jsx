@@ -20,6 +20,7 @@ import InputField from "../components/ui/InputField";
 import ModalSheet from "../components/ui/ModalSheet";
 import SelectField from "../components/ui/SelectField";
 import SkillsInput from "../components/ui/SkillsInput";
+import VerifiedBadge from "../components/ui/VerifiedBadge";
 import {
   DiscoverIcon,
   SavedIcon,
@@ -877,13 +878,17 @@ const SeekerDashboard = () => {
               return null;
             }
 
+            const companyVerified = Boolean(job.company?.companyProfile?.isVerified);
+
             return (
               <div key={savedItem._id} className="surface-subtle p-4">
                 <div className="space-y-2">
                   <p className="text-base font-semibold text-slate-100">{job.title}</p>
-                  <p className="text-xs text-slate-300">
-                    {job.company?.companyProfile?.companyName || "Company"} • {job.location}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                    <span>{job.company?.companyProfile?.companyName || "Company"}</span>
+                    {companyVerified && <VerifiedBadge compact />}
+                    <span>• {job.location}</span>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -921,11 +926,15 @@ const SeekerDashboard = () => {
       <ModalSheet
         open={Boolean(savedJobDetails)}
         title={savedJobDetails?.title || "Job details"}
-        subtitle={savedJobDetails?.company?.companyProfile?.companyName || ""}
+        subtitle={savedJobDetails?.location || ""}
         onClose={() => setSavedJobDetails(null)}
       >
         {savedJobDetails && (
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-200">
+              <span>{savedJobDetails.company?.companyProfile?.companyName || "Company"}</span>
+              {savedJobDetails.company?.companyProfile?.isVerified && <VerifiedBadge compact />}
+            </div>
             <p className="text-sm leading-relaxed text-slate-300">{savedJobDetails.description}</p>
             <div className="flex flex-wrap gap-2">
               {(savedJobDetails.requiredSkills || []).map((skill) => (

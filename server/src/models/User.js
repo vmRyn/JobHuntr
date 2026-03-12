@@ -23,7 +23,17 @@ const companyProfileSchema = new Schema(
     companyName: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
     industry: { type: String, trim: true, default: "" },
-    logo: { type: String, trim: true, default: "" }
+    logo: { type: String, trim: true, default: "" },
+    isVerified: { type: Boolean, default: false },
+    verifiedAt: { type: Date, default: null },
+    verifiedBy: { type: Schema.Types.ObjectId, ref: "User", default: null }
+  },
+  { _id: false }
+);
+
+const adminProfileSchema = new Schema(
+  {
+    name: { type: String, trim: true, default: "" }
   },
   { _id: false }
 );
@@ -32,7 +42,7 @@ const userSchema = new Schema(
   {
     userType: {
       type: String,
-      enum: ["seeker", "company"],
+      enum: ["seeker", "company", "admin"],
       required: true
     },
     email: {
@@ -55,6 +65,19 @@ const userSchema = new Schema(
     companyProfile: {
       type: companyProfileSchema,
       default: () => ({})
+    },
+    adminProfile: {
+      type: adminProfileSchema,
+      default: () => ({})
+    },
+    isSuspended: {
+      type: Boolean,
+      default: false
+    },
+    suspensionReason: {
+      type: String,
+      trim: true,
+      default: ""
     },
     jobListings: [
       {

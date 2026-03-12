@@ -104,7 +104,10 @@ export const getJobsFeed = async (req, res) => {
     }
 
     let jobQueryBuilder = Job.find(jobQuery)
-      .populate("company", "companyProfile.companyName companyProfile.logo companyProfile.industry")
+      .populate(
+        "company",
+        "companyProfile.companyName companyProfile.logo companyProfile.industry companyProfile.isVerified"
+      )
       .limit(50);
 
     if (!postcode?.trim()) {
@@ -136,7 +139,7 @@ export const getJobById = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).populate(
       "company",
-      "companyProfile.companyName companyProfile.logo companyProfile.industry"
+      "companyProfile.companyName companyProfile.logo companyProfile.industry companyProfile.isVerified"
     );
 
     if (!job) {

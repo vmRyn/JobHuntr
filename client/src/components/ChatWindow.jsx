@@ -4,6 +4,7 @@ import api from "../api/client";
 import Button from "./ui/Button";
 import LoadingSpinner from "./LoadingSpinner";
 import { getAssetUrl } from "../utils/assets";
+import VerifiedBadge from "./ui/VerifiedBadge";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
 const reactionOptions = ["👍", "❤️", "🎉", "🔥", "👀"];
@@ -168,6 +169,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
   const counterpartName = getName(counterpart);
   const counterpartImage = getProfileImage(counterpart);
   const counterpartId = extractId(counterpart);
+  const counterpartVerified =
+    currentUser?.userType === "seeker" && Boolean(counterpart?.companyProfile?.isVerified);
 
   const markMessagesRead = async (force = false) => {
     if (!selectedMatchId || !currentUser?._id) return;
@@ -487,7 +490,10 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
 
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Chatting with</p>
-              <p className="font-display text-xl text-slate-50">{counterpartName}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-display text-xl text-slate-50">{counterpartName}</p>
+                {counterpartVerified && <VerifiedBadge compact />}
+              </div>
             </div>
           </div>
 
