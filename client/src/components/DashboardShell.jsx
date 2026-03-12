@@ -23,20 +23,48 @@ const DashboardShell = ({ title, subtitle, tabs, activeTab, onTabChange, childre
 
   return (
     <div className="page-frame flex min-h-screen flex-col pb-28">
-      <header className="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <p className="app-badge">JobHuntr</p>
-          <h1 className="font-display text-3xl text-slate-50 md:text-4xl">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-slate-300">{subtitle}</p>}
+      <header className="surface-card mb-5 p-4 md:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2">
+            <p className="app-badge">JobHuntr</p>
+            <h1 className="font-display text-3xl text-slate-50 md:text-4xl">{title}</h1>
+            {subtitle && <p className="max-w-2xl text-sm text-slate-300">{subtitle}</p>}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-transparent bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.12)]">
+              {getUserLabel(user)}
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="hidden rounded-full border border-white/15 bg-slate-950/52 px-3 py-2 text-xs font-medium text-slate-200 md:inline-block">
-            {getUserLabel(user)}
-          </span>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            Logout
-          </Button>
+        <div className="soft-divider mt-4 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  if (!tab.disabled) {
+                    onTabChange(tab.id);
+                  }
+                }}
+                disabled={Boolean(tab.disabled)}
+                className={`hidden rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition md:inline-flex ${
+                  activeTab === tab.id
+                    ? "border-brandStrong/55 bg-gradient-to-r from-brandHot/20 via-brand/18 to-brandStrong/20 text-slate-50"
+                    : tab.disabled
+                      ? "cursor-not-allowed border-transparent bg-slate-900/40 text-slate-500"
+                      : "border-transparent bg-slate-900/65 text-slate-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:text-slate-100"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 

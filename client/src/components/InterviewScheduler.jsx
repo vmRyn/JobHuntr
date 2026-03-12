@@ -183,7 +183,7 @@ const InterviewScheduler = ({
           <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Interview scheduling</p>
           <h3 className="font-display text-xl text-slate-50">Availability and calendar sync</h3>
         </div>
-        {selectedMatch && <span className="chip normal-case tracking-normal">{scheduleSummary}</span>}
+        {selectedMatch && <span className="chip chip-accent normal-case tracking-normal">{scheduleSummary}</span>}
       </div>
 
       {!selectedMatch && <div className="empty-state">Select a match to schedule interviews.</div>}
@@ -330,7 +330,7 @@ const InterviewScheduler = ({
                         href={googleLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center rounded-xl border border-brand/50 bg-brand/18 px-3 py-1.5 text-xs font-semibold text-cyan-50 transition hover:bg-brand/24"
+                        className="inline-flex items-center rounded-xl border border-brandStrong/45 bg-gradient-to-r from-brandHot/18 via-brand/16 to-brandStrong/18 px-3 py-1.5 text-xs font-semibold text-slate-50 transition hover:border-brandStrong/60"
                       >
                         Add to Google
                       </a>
@@ -340,7 +340,7 @@ const InterviewScheduler = ({
                         href={outlookLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center rounded-xl border border-white/22 bg-white/8 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-brand/55 hover:bg-white/12"
+                        className="inline-flex items-center rounded-xl border border-white/22 bg-white/8 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:border-brandStrong/55 hover:bg-white/12"
                       >
                         Add to Outlook
                       </a>

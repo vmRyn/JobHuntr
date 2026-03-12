@@ -1,5 +1,6 @@
 import Job from "../models/Job.js";
 import Match from "../models/Match.js";
+import SavedItem from "../models/SavedItem.js";
 import Swipe from "../models/Swipe.js";
 import User from "../models/User.js";
 
@@ -45,6 +46,13 @@ export const swipeJob = async (req, res) => {
     if (!job || !job.isActive) {
       return res.status(404).json({ message: "Job not found" });
     }
+
+    await SavedItem.findOneAndDelete({
+      user: req.user._id,
+      targetType: "job",
+      targetJob: job._id,
+      targetUser: null
+    });
 
     const swipe = await Swipe.findOneAndUpdate(
       {
@@ -119,6 +127,13 @@ export const swipeCandidate = async (req, res) => {
     if (!candidate) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+
+    await SavedItem.findOneAndDelete({
+      user: req.user._id,
+      targetType: "candidate",
+      targetJob: job._id,
+      targetUser: candidate._id
+    });
 
     const swipe = await Swipe.findOneAndUpdate(
       {

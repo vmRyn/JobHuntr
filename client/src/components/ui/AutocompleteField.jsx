@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 const AutocompleteField = ({
   label,
@@ -13,6 +13,8 @@ const AutocompleteField = ({
 }) => {
   const [focused, setFocused] = useState(false);
   const [internalValue, setInternalValue] = useState(value || "");
+  const generatedId = useId();
+  const fieldId = name || generatedId;
 
   useEffect(() => {
     setInternalValue(value || "");
@@ -37,10 +39,11 @@ const AutocompleteField = ({
   };
 
   return (
-    <label className={`block space-y-2 ${className}`}>
+    <label htmlFor={fieldId} className={`block space-y-2 ${className}`}>
       {label && <span className="label-text">{label}</span>}
       <div className="relative">
         <input
+          id={fieldId}
           className="field-control"
           name={name}
           required={required}
@@ -64,7 +67,7 @@ const AutocompleteField = ({
               <button
                 key={suggestion}
                 type="button"
-                className="block w-full px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-brand/12"
+                className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-slate-100 transition last:border-b-0 hover:bg-white/8"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleSelect(suggestion)}
               >

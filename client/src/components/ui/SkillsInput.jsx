@@ -53,8 +53,9 @@ const SkillsInput = ({
               {skill}
               <button
                 type="button"
-                className="text-brand/80 transition hover:text-brand"
+                className="rounded-full p-0.5 text-brandStrong/80 transition hover:text-brandStrong"
                 onClick={() => removeSkill(skill)}
+                aria-label={`Remove ${skill}`}
               >
                 ×
               </button>

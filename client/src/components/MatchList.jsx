@@ -38,10 +38,10 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
             key={match._id}
             type="button"
             onClick={() => onSelect(match)}
-            className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+            className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-brandStrong/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
               selected
-                ? "border-brand/60 bg-gradient-to-r from-brand/18 to-brandStrong/15 ring-1 ring-brand/35"
-                : "border-white/15 bg-slate-950/48 hover:border-brand/45 hover:bg-slate-900/62"
+                ? "border-brandStrong/60 bg-gradient-to-r from-brandHot/20 via-brand/18 to-brandStrong/18 ring-1 ring-brandStrong/35"
+                : "border-white/15 bg-slate-950/55 hover:border-brandStrong/45 hover:bg-slate-900/72"
             }`}
           >
             <div className="flex items-center gap-3">
@@ -61,6 +61,8 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
                 <p className="truncate text-sm font-semibold text-slate-50">{counterpartName}</p>
                 <p className="mt-1 truncate text-xs text-slate-300">{match.job?.title || "Open role"}</p>
               </div>
+
+              <span className="chip normal-case tracking-normal">{(match.stage || "new").toUpperCase()}</span>
             </div>
           </button>
         );

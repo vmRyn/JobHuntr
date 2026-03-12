@@ -1,9 +1,9 @@
 import { calculateProfileStrength } from "../utils/profileStrength";
 
 const getMeterClassName = (score) => {
-  if (score >= 80) return "from-emerald-500 to-teal-400";
-  if (score >= 55) return "from-sky-500 to-cyan-400";
-  return "from-amber-500 to-orange-400";
+  if (score >= 80) return "from-positive to-brandStrong";
+  if (score >= 55) return "from-brand to-brandStrong";
+  return "from-brandHot to-amber-400";
 };
 
 const ProfileStrengthCard = ({
@@ -28,12 +28,12 @@ const ProfileStrengthCard = ({
           <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile strength</p>
           <p className="text-lg font-semibold text-slate-50">{score}% complete</p>
         </div>
-        <span className="chip">
+        <span className="chip chip-accent">
           {completed}/{total} checks
         </span>
       </div>
 
-      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-900/75">
+      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-900/78">
         <div
           className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ${getMeterClassName(score)}`}
           style={{ width: `${score}%` }}
@@ -46,7 +46,7 @@ const ProfileStrengthCard = ({
           <ul className="space-y-1.5 text-sm text-slate-200">
             {nextActions.slice(0, 4).map((action) => (
               <li key={action} className="flex items-start gap-2">
-                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand" />
+                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brandStrong" />
                 <span>{action}</span>
               </li>
             ))}

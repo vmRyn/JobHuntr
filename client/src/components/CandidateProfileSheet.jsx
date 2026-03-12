@@ -109,14 +109,14 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
                   href={cvUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-11 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 px-4 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-brandStrong/35 bg-gradient-to-r from-brandHot via-brand to-brandStrong px-4 text-sm font-semibold text-white shadow-neon transition hover:brightness-110"
                 >
                   View CV
                 </a>
                 <a
                   href={cvUrl}
                   download={seekerProfile.cvOriginalName || true}
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-white/18 bg-white/8 px-4 text-sm font-semibold text-slate-100 transition hover:border-brand/55 hover:bg-white/12"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/16 bg-slate-900/72 px-4 text-sm font-semibold text-slate-100 transition hover:border-brandStrong/45 hover:bg-slate-900/90"
                 >
                   Download CV
                 </a>

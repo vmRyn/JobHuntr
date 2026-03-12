@@ -20,11 +20,13 @@ import SelectField from "../components/ui/SelectField";
 import {
   DiscoverIcon,
   JobsIcon,
+  SavedIcon,
   MatchesIcon,
   MessagesIcon,
   ProfileIcon
 } from "../components/ui/NavIcons";
 import { useAuth } from "../context/AuthContext";
+import { getProfileCompletionState } from "../utils/profileCompletion";
 
 const defaultJobForm = {
   id: "",
@@ -48,12 +50,13 @@ const CompanyDashboard = () => {
   const { user, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("discover");
   const [jobs, setJobs] = useState([]);
+  const [savedCandidates, setSavedCandidates] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [candidates, setCandidates] = useState([]);
   const [matches, setMatches] = useState([]);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [jobModalOpen, setJobModalOpen] = useState(false);
-  const [candidateDetailsOpen, setCandidateDetailsOpen] = useState(false);
+  const [candidateDetails, setCandidateDetails] = useState(null);
   const [matchedProfileOpen, setMatchedProfileOpen] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [updatingStageMatchId, setUpdatingStageMatchId] = useState("");
@@ -61,8 +64,25 @@ const CompanyDashboard = () => {
   const [profileForm, setProfileForm] = useState(createInitialProfile(user));
   const [profileFiles, setProfileFiles] = useState({ logo: null });
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [loadingSavedCandidates, setLoadingSavedCandidates] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  const profileCompletion = useMemo(() => getProfileCompletionState(user), [user]);
+  const profileLocked = !profileCompletion.profileCompleted;
+  const resolvedActiveTab = profileLocked ? "profile" : activeTab;
+  const profileLockMessage = useMemo(() => {
+    if (!profileLocked) {
+      return "";
+    }
+
+    const labels = profileCompletion.missingProfileFields.map((field) => field.label);
+    if (!labels.length) {
+      return "Complete your profile before using Discover, Jobs, Saved, Matches, and Messages.";
+    }
+
+    return `Complete your company profile first: ${labels.join(", ")}.`;
+  }, [profileCompletion.missingProfileFields, profileLocked]);
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job._id === selectedJobId) || null,
@@ -74,19 +94,34 @@ const CompanyDashboard = () => {
 
   const tabs = useMemo(
     () => [
-      { id: "discover", label: "Discover", icon: <DiscoverIcon /> },
-      { id: "jobs", label: "Jobs", icon: <JobsIcon /> },
-      { id: "matches", label: "Matches", icon: <MatchesIcon /> },
-      { id: "messages", label: "Messages", icon: <MessagesIcon /> },
+      { id: "discover", label: "Discover", icon: <DiscoverIcon />, disabled: profileLocked },
+      { id: "jobs", label: "Jobs", icon: <JobsIcon />, disabled: profileLocked },
+      { id: "saved", label: "Saved", icon: <SavedIcon />, disabled: profileLocked },
+      { id: "matches", label: "Matches", icon: <MatchesIcon />, disabled: profileLocked },
+      { id: "messages", label: "Messages", icon: <MessagesIcon />, disabled: profileLocked },
       { id: "profile", label: "Profile", icon: <ProfileIcon /> }
     ],
-    []
+    [profileLocked]
   );
+
+  const handleTabChange = (nextTab) => {
+    if (profileLocked && nextTab !== "profile") {
+      return;
+    }
+
+    setActiveTab(nextTab);
+  };
 
   useEffect(() => {
     setProfileForm(createInitialProfile(user));
     setProfileFiles({ logo: null });
   }, [user]);
+
+  useEffect(() => {
+    if (profileLocked && activeTab !== "profile") {
+      setActiveTab("profile");
+    }
+  }, [activeTab, profileLocked]);
 
   const loadJobs = async () => {
     setError("");
@@ -138,16 +173,46 @@ const CompanyDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    loadJobs();
-    loadMatches();
-  }, []);
+  const loadSavedCandidates = async () => {
+    setLoadingSavedCandidates(true);
+
+    try {
+      const { data } = await api.get("/saved");
+      setSavedCandidates(data.savedCandidates || []);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to load saved candidates");
+    } finally {
+      setLoadingSavedCandidates(false);
+    }
+  };
 
   useEffect(() => {
+    if (profileLocked) {
+      setJobs([]);
+      setCandidates([]);
+      setSavedCandidates([]);
+      setMatches([]);
+      setSelectedMatch(null);
+      setSelectedJobId("");
+      setLoadingSavedCandidates(false);
+      return;
+    }
+
+    loadJobs();
+    loadSavedCandidates();
+    loadMatches();
+  }, [profileLocked]);
+
+  useEffect(() => {
+    if (profileLocked) {
+      setCandidates([]);
+      return;
+    }
+
     if (selectedJobId) {
       loadCandidates(selectedJobId);
     }
-  }, [selectedJobId]);
+  }, [selectedJobId, profileLocked]);
 
   const resetForm = () => setJobForm(defaultJobForm);
 
@@ -250,6 +315,72 @@ const CompanyDashboard = () => {
     }
   };
 
+  const handleSaveCandidate = async () => {
+    const candidate = activeCandidate;
+    if (!candidate || !selectedJobId) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.post(`/saved/candidate/${candidate._id}`, { jobId: selectedJobId });
+      setCandidates((prev) => prev.slice(1));
+      setNotice("Candidate saved to your list");
+      loadSavedCandidates();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to save candidate");
+    }
+  };
+
+  const handleMatchSavedCandidate = async (savedItem) => {
+    const candidateId = savedItem?.targetUser?._id;
+    const jobId = savedItem?.targetJob?._id;
+
+    if (!candidateId || !jobId) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const { data } = await api.post(`/swipes/candidate/${candidateId}`, {
+        direction: "right",
+        jobId
+      });
+
+      setSavedCandidates((prev) => prev.filter((item) => item._id !== savedItem._id));
+
+      if (data.matched) {
+        setNotice("Match created. Open chat on the right.");
+        loadMatches();
+      } else {
+        setNotice("Candidate matched from saved list");
+      }
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to match saved candidate");
+    }
+  };
+
+  const handleRemoveSavedCandidate = async (savedItemId) => {
+    if (!savedItemId) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.delete(`/saved/${savedItemId}`);
+      setSavedCandidates((prev) => prev.filter((item) => item._id !== savedItemId));
+      setNotice("Removed from saved candidates");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to remove saved candidate");
+    }
+  };
+
   const handleProfileChange = (event) => {
     const { name, value } = event.target;
     setProfileForm((prev) => ({ ...prev, [name]: value }));
@@ -340,8 +471,8 @@ const CompanyDashboard = () => {
                 onClick={() => setSelectedJobId(job._id)}
                 className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-semibold transition ${
                   selectedJobId === job._id
-                    ? "border-brand/60 bg-gradient-to-r from-brand/20 to-brandStrong/15 text-cyan-100"
-                    : "border-white/15 bg-white/8 text-slate-300 hover:border-brand/45"
+                    ? "border-brandStrong/60 bg-gradient-to-r from-brandHot/20 via-brand/18 to-brandStrong/18 text-cyan-100"
+                    : "border-white/15 bg-white/8 text-slate-300 hover:border-brandStrong/45"
                 }`}
               >
                 {job.title}
@@ -364,12 +495,12 @@ const CompanyDashboard = () => {
               </SwipeCard>
               <div className="grid grid-cols-3 gap-2">
                 <Button variant="secondary" onClick={() => handleCandidateSwipe("left")}>
-                  Pass
+                  Skip
                 </Button>
-                <Button variant="ghost" onClick={() => setCandidateDetailsOpen(true)}>
-                  Details
+                <Button variant="ghost" onClick={handleSaveCandidate}>
+                  Save
                 </Button>
-                <Button onClick={() => handleCandidateSwipe("right")}>Like</Button>
+                <Button onClick={() => handleCandidateSwipe("right")}>Match</Button>
               </div>
             </>
           )}
@@ -381,33 +512,110 @@ const CompanyDashboard = () => {
           )}
         </Card>
 
-        <ModalSheet
-          open={candidateDetailsOpen && Boolean(activeCandidate)}
-          title={activeCandidate?.seekerProfile?.name || "Candidate details"}
-          subtitle={selectedJob?.title || ""}
-          onClose={() => setCandidateDetailsOpen(false)}
-        >
-          {activeCandidate && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-300">
-                {activeCandidate.seekerProfile?.bio || "No bio provided by this candidate."}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {(activeCandidate.seekerProfile?.skills || []).map((skill) => (
-                  <span
-                    key={skill}
-                    className="chip chip-accent normal-case tracking-normal"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </ModalSheet>
       </div>
     );
   };
+
+  const renderSaved = () => (
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Saved</p>
+          <h2 className="font-display text-2xl text-slate-50">Saved candidates</h2>
+        </div>
+        <span className="chip chip-accent normal-case tracking-normal">
+          {savedCandidates.length} saved
+        </span>
+      </div>
+
+      {loadingSavedCandidates && <LoadingSpinner label="Loading saved candidates" />}
+
+      {!loadingSavedCandidates && !savedCandidates.length && (
+        <div className="empty-state">
+          No saved candidates yet. Save candidates from Discover to review later.
+        </div>
+      )}
+
+      {!loadingSavedCandidates && savedCandidates.length > 0 && (
+        <div className="space-y-2.5">
+          {savedCandidates.map((savedItem) => {
+            const candidate = savedItem.targetUser;
+            const job = savedItem.targetJob;
+
+            if (!candidate || !job) {
+              return null;
+            }
+
+            return (
+              <div key={savedItem._id} className="surface-subtle p-4">
+                <div className="space-y-2">
+                  <p className="text-base font-semibold text-slate-100">
+                    {candidate.seekerProfile?.name || "Candidate"}
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    {candidate.seekerProfile?.location || "Location not set"} • Saved for {job.title}
+                  </p>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {candidate.seekerProfile?.industryField && (
+                    <span className="chip chip-accent normal-case tracking-normal">
+                      {candidate.seekerProfile.industryField}
+                    </span>
+                  )}
+                  {(candidate.seekerProfile?.skills || []).slice(0, 3).map((skill) => (
+                    <span key={`${savedItem._id}-${skill}`} className="chip normal-case tracking-normal">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button onClick={() => handleMatchSavedCandidate(savedItem)}>Match</Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setCandidateDetails({
+                        candidate,
+                        subtitle: job.title
+                      })
+                    }
+                  >
+                    View details
+                  </Button>
+                  <Button variant="ghost" onClick={() => handleRemoveSavedCandidate(savedItem._id)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <ModalSheet
+        open={Boolean(candidateDetails)}
+        title={candidateDetails?.candidate?.seekerProfile?.name || "Candidate details"}
+        subtitle={candidateDetails?.subtitle || ""}
+        onClose={() => setCandidateDetails(null)}
+      >
+        {candidateDetails?.candidate && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              {candidateDetails.candidate.seekerProfile?.bio || "No bio provided by this candidate."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(candidateDetails.candidate.seekerProfile?.skills || []).map((skill) => (
+                <span key={skill} className="chip chip-accent normal-case tracking-normal">
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </ModalSheet>
+    </Card>
+  );
 
   const renderJobs = () => (
     <div className="space-y-3">
@@ -572,7 +780,7 @@ const CompanyDashboard = () => {
               variant="secondary"
               size="sm"
               disabled={!selectedMatch}
-              onClick={() => setActiveTab("messages")}
+              onClick={() => handleTabChange("messages")}
             >
               Open chat
             </Button>
@@ -614,7 +822,7 @@ const CompanyDashboard = () => {
   );
 
   const renderMessages = () => (
-    <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
+    <div className="grid gap-3 xl:grid-cols-[320px_1fr]">
       <Card className="space-y-3">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Conversations</p>
         <MatchList
@@ -705,6 +913,7 @@ const CompanyDashboard = () => {
   const contentByTab = {
     discover: renderDiscover(),
     jobs: renderJobs(),
+    saved: renderSaved(),
     matches: renderMatches(),
     messages: renderMessages(),
     profile: renderProfile()
@@ -713,14 +922,14 @@ const CompanyDashboard = () => {
   return (
     <DashboardShell
       title="Company Mode"
-      subtitle="Keep the workflow focused: list jobs, swipe talent, and message matches."
+      subtitle="List roles, swipe talent quickly, and progress top candidates through your pipeline."
       tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      notice={notice}
-      error={error}
+      activeTab={resolvedActiveTab}
+      onTabChange={handleTabChange}
+      notice={profileLocked ? "" : notice}
+      error={profileLocked ? profileLockMessage : error}
     >
-      {contentByTab[activeTab]}
+      {contentByTab[resolvedActiveTab]}
 
       <CandidateProfileSheet
         open={matchedProfileOpen}

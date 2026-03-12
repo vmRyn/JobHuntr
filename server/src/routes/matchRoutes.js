@@ -7,15 +7,17 @@ import {
 	updateMatchInterview,
 	updateMatchStage
 } from "../controllers/matchController.js";
-import { protect, requireRole } from "../middleware/auth.js";
+import { protect, requireCompletedProfile, requireRole } from "../middleware/auth.js";
 
 const router = Router();
 
-router.get("/", protect, getMyMatches);
-router.get("/:matchId/candidate-profile", protect, requireRole("company"), getMatchedCandidateProfile);
-router.patch("/:matchId/stage", protect, requireRole("company"), updateMatchStage);
-router.get("/:matchId/interviews", protect, getMatchInterviews);
-router.post("/:matchId/interviews", protect, requireRole("company"), createMatchInterview);
-router.patch("/:matchId/interviews/:interviewId", protect, requireRole("company"), updateMatchInterview);
+router.use(protect, requireCompletedProfile);
+
+router.get("/", getMyMatches);
+router.get("/:matchId/candidate-profile", requireRole("company"), getMatchedCandidateProfile);
+router.patch("/:matchId/stage", requireRole("company"), updateMatchStage);
+router.get("/:matchId/interviews", getMatchInterviews);
+router.post("/:matchId/interviews", requireRole("company"), createMatchInterview);
+router.patch("/:matchId/interviews/:interviewId", requireRole("company"), updateMatchInterview);
 
 export default router;

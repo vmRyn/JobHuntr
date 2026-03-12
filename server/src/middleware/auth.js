@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { attachProfileCompletion, getProfileCompletionState } from "../utils/profileCompletion.js";
 
 export const protect = async (req, res, next) => {
   try {
@@ -17,7 +18,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
-    req.user = user;
+    req.user = attachProfileCompletion(user);
     next();
   } catch (error) {
     return res.status(401).json({ message: "Invalid token" });
@@ -30,4 +31,18 @@ export const requireRole = (role) => (req, res, next) => {
   }
 
   return next();
+};
+
+export const requireCompletedProfile = (req, res, next) => {
+  const completion = getProfileCompletionState(req.user);
+
+  if (completion.profileCompleted) {
+    return next();
+  }
+
+  return res.status(403).json({
+    code: "PROFILE_INCOMPLETE",
+    message: "Complete your profile before using this feature",
+    ...completion
+  });
 };

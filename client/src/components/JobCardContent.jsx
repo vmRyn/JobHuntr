@@ -8,16 +8,28 @@ const JobCardContent = ({ job }) => {
 
   return (
     <div className="relative z-10 flex h-full flex-col gap-5 pt-10">
-      {companyLogo && (
-        <img
-          src={companyLogo}
-          alt={companyName}
-          className="h-16 w-16 rounded-3xl border border-white/10 object-cover"
-        />
-      )}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {companyLogo ? (
+            <img
+              src={companyLogo}
+              alt={companyName}
+              className="h-14 w-14 rounded-2xl border border-white/14 object-cover"
+            />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/14 bg-slate-900/70 text-sm font-semibold text-slate-100">
+              {companyName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">{companyName}</p>
+            <p className="text-sm text-slate-200">{jobIndustry}</p>
+          </div>
+        </div>
+        <span className="chip chip-accent">New</span>
+      </div>
 
       <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-300">{companyName}</p>
         <h3 className="font-display text-3xl leading-tight text-slate-50 md:text-4xl">{job.title}</h3>
       </div>
 

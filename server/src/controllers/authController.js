@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import createToken from "../utils/createToken.js";
+import { attachProfileCompletion } from "../utils/profileCompletion.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills;
@@ -93,7 +94,7 @@ export const register = async (req, res) => {
 
     return res.status(201).json({
       token: createToken(user),
-      user: safeUser
+      user: attachProfileCompletion(safeUser)
     });
   } catch (error) {
     return res.status(500).json({ message: "Registration failed" });
@@ -124,7 +125,7 @@ export const login = async (req, res) => {
 
     return res.json({
       token: createToken(user),
-      user: safeUser
+      user: attachProfileCompletion(safeUser)
     });
   } catch (error) {
     return res.status(500).json({ message: "Login failed" });
@@ -132,5 +133,5 @@ export const login = async (req, res) => {
 };
 
 export const getMe = async (req, res) => {
-  return res.json(req.user);
+  return res.json(attachProfileCompletion(req.user));
 };

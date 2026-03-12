@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Card from "../components/ui/Card";
@@ -34,46 +35,75 @@ const LoginPage = () => {
 
   return (
     <section className="page-frame flex min-h-screen items-center justify-center pb-20 md:pb-10">
-      <Card className="w-full max-w-md space-y-6 p-5 md:p-6">
-        <div className="space-y-2">
+      <div className="grid w-full max-w-5xl gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <motion.aside
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="surface-card hidden space-y-4 p-6 lg:block"
+        >
           <p className="app-badge">Welcome back</p>
-          <h1 className="font-display text-3xl text-slate-50">Log in to JobHuntr</h1>
-        </div>
+          <h2 className="font-display text-4xl leading-tight text-slate-50">
+            Keep your pipeline moving.
+          </h2>
+          <p className="text-sm leading-relaxed text-slate-300">
+            Continue swiping new opportunities, respond to matches, and keep interviews on track.
+          </p>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <InputField
-            label="Email"
-            type="email"
-            name="email"
-            placeholder="you@example.com"
-            value={form.email}
-            onChange={handleChange}
-            required
-          />
-          <InputField
-            label="Password"
-            type="password"
-            name="password"
-            placeholder="Your password"
-            value={form.password}
-            onChange={handleChange}
-            required
-          />
+          <div className="space-y-2 pt-2">
+            <div className="surface-subtle p-3 text-sm text-slate-200">Live swipe deck with instant updates</div>
+            <div className="surface-subtle p-3 text-sm text-slate-200">Threaded chat with attachments and reactions</div>
+            <div className="surface-subtle p-3 text-sm text-slate-200">Interview scheduling with calendar export</div>
+          </div>
+        </motion.aside>
 
-          <Button className="w-full" type="submit" disabled={loading}>
-            {loading ? "Signing in..." : "Log In"}
-          </Button>
-        </form>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.48, delay: 0.06 }}
+        >
+          <Card className="w-full space-y-6 p-6 md:p-7">
+            <div className="space-y-2">
+              <p className="app-badge">Secure login</p>
+              <h1 className="font-display text-3xl text-slate-50 md:text-4xl">Log in to JobHuntr</h1>
+            </div>
 
-        {error && <p className="status-error">{error}</p>}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <InputField
+                label="Email"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={handleChange}
+                required
+              />
+              <InputField
+                label="Password"
+                type="password"
+                name="password"
+                placeholder="Your password"
+                value={form.password}
+                onChange={handleChange}
+                required
+              />
 
-        <p className="text-sm text-slate-300">
-          New here?{" "}
-          <Link to="/register" className="font-semibold text-brand hover:text-brandStrong">
-            Create an account
-          </Link>
-        </p>
-      </Card>
+              <Button className="w-full" type="submit" disabled={loading}>
+                {loading ? "Signing in..." : "Log In"}
+              </Button>
+            </form>
+
+            {error && <p className="status-error">{error}</p>}
+
+            <p className="text-sm text-slate-300">
+              New here?{" "}
+              <Link to="/register" className="font-semibold text-brandStrong hover:text-brandHot">
+                Create an account
+              </Link>
+            </p>
+          </Card>
+        </motion.div>
+      </div>
     </section>
   );
 };

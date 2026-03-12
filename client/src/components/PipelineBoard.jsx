@@ -45,12 +45,12 @@ const PipelineBoard = ({
   }
 
   return (
-    <div className="grid gap-3 xl:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {stages.map((stage) => (
         <div key={stage.id} className="surface-subtle p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-50">{stage.label}</p>
-            <span className="chip">{groupedMatches[stage.id].length}</span>
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-100">{stage.label}</p>
+            <span className="chip chip-accent">{groupedMatches[stage.id].length}</span>
           </div>
 
           <div className="space-y-2">
@@ -61,8 +61,8 @@ const PipelineBoard = ({
                   key={match._id}
                   className={`w-full rounded-2xl border p-3 text-left transition ${
                     isSelected
-                      ? "border-brand/60 bg-gradient-to-r from-brand/18 to-brandStrong/15"
-                      : "border-white/15 bg-slate-950/55 hover:border-brand/45"
+                      ? "border-brandStrong/60 bg-gradient-to-r from-brandHot/20 via-brand/18 to-brandStrong/18"
+                      : "border-white/15 bg-slate-950/55 hover:border-brandStrong/45"
                   }`}
                 >
                   <button type="button" className="w-full text-left" onClick={() => onSelectMatch(match)}>

@@ -7,15 +7,17 @@ import {
   getJobsFeed,
   updateJob
 } from "../controllers/jobController.js";
-import { protect } from "../middleware/auth.js";
+import { protect, requireCompletedProfile } from "../middleware/auth.js";
 
 const router = Router();
 
-router.get("/", protect, getJobsFeed);
-router.get("/company", protect, getCompanyJobs);
-router.get("/:id", protect, getJobById);
-router.post("/", protect, createJob);
-router.put("/:id", protect, updateJob);
-router.delete("/:id", protect, deleteJob);
+router.use(protect, requireCompletedProfile);
+
+router.get("/", getJobsFeed);
+router.get("/company", getCompanyJobs);
+router.get("/:id", getJobById);
+router.post("/", createJob);
+router.put("/:id", updateJob);
+router.delete("/:id", deleteJob);
 
 export default router;

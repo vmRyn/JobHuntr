@@ -25,6 +25,18 @@ export const MatchesIcon = () => (
   </svg>
 );
 
+export const SavedIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" className={iconClassName} aria-hidden>
+    <path
+      d="M7 4.5h10a1.5 1.5 0 0 1 1.5 1.5v13l-6.5-3-6.5 3v-13A1.5 1.5 0 0 1 7 4.5Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const MessagesIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" className={iconClassName} aria-hidden>
     <path

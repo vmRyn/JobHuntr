@@ -477,10 +477,10 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
               <img
                 src={counterpartImage}
                 alt={counterpartName}
-                className="h-12 w-12 rounded-2xl border border-white/20 object-cover"
+                className="h-12 w-12 rounded-2xl object-cover ring-1 ring-brandStrong/30"
               />
             ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-slate-900/75 text-sm font-semibold text-slate-100">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/80 text-sm font-semibold text-slate-100 ring-1 ring-brandStrong/25">
                 {getInitial(counterpartName)}
               </div>
             )}
@@ -498,7 +498,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       {loading && <LoadingSpinner label="Loading messages" />}
 
       {!loading && (
-        <div className="max-h-[340px] space-y-3 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/64 p-3 ring-1 ring-white/5">
+        <div className="max-h-[420px] space-y-3 overflow-y-auto rounded-2xl bg-slate-950/72 p-3 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.14)]">
           {!messages.length && <p className="text-sm text-slate-300">No messages yet.</p>}
 
           {messages.map((message) => {
@@ -533,8 +533,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                   <div
                     className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                       mine
-                        ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 text-white shadow-[0_12px_30px_-18px_rgba(34,211,238,0.85)]"
-                        : "border border-white/18 bg-white/10 text-slate-100"
+                        ? "bg-gradient-to-r from-brandHot via-brand to-brandStrong text-white shadow-[0_16px_34px_-20px_rgba(124,58,237,0.85)]"
+                        : "bg-slate-800/70 text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
                     }`}
                   >
                     {message.text && <p>{message.text}</p>}
@@ -543,8 +543,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                       <div
                         className={`${message.text ? "mt-2" : ""} rounded-xl border px-3 py-2 ${
                           mine
-                            ? "border-white/30 bg-white/12"
-                            : "border-brand/45 bg-brand/16"
+                            ? "border-transparent bg-white/12 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+                            : "border-transparent bg-brand/16 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.3)]"
                         }`}
                       >
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
@@ -583,7 +583,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                             <img
                               src={attachmentUrl}
                               alt={attachment.originalName || "Attachment"}
-                              className="max-h-44 rounded-xl border border-white/20 object-cover"
+                              className="max-h-44 rounded-xl object-cover shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                             />
                           </a>
                         ) : (
@@ -591,7 +591,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                             href={attachmentUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center rounded-xl border border-white/28 bg-white/10 px-3 py-2 text-xs font-semibold text-slate-50 hover:border-brand/50 hover:bg-white/15"
+                            className="inline-flex items-center rounded-xl border border-transparent bg-slate-800/80 px-3 py-2 text-xs font-semibold text-slate-50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:bg-slate-700/80"
                           >
                             {attachment.originalName || "Attachment"}
                             {attachment.size ? ` (${formatFileSize(attachment.size)})` : ""}
@@ -608,8 +608,8 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                         type="button"
                         className={`rounded-full border px-2 py-0.5 text-xs ${
                           reaction.mine
-                            ? "border-brand/60 bg-brand/24 text-cyan-100"
-                            : "border-white/25 bg-white/10 text-slate-100"
+                            ? "border-transparent bg-brand/30 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.3)]"
+                            : "border-transparent bg-slate-800/70 text-slate-100"
                         }`}
                         onClick={() => handleToggleReaction(message._id, reaction.emoji)}
                         disabled={reactingMessageId === message._id}
@@ -622,7 +622,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                       <button
                         key={`${message._id}-quick-${emoji}`}
                         type="button"
-                        className="rounded-full border border-white/18 bg-slate-900/65 px-1.5 py-0.5 text-[11px] text-slate-200 hover:border-brand/55"
+                        className="rounded-full border border-transparent bg-slate-900/70 px-1.5 py-0.5 text-[11px] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:bg-slate-800/80"
                         onClick={() => handleToggleReaction(message._id, emoji)}
                         disabled={reactingMessageId === message._id}
                       >
@@ -636,7 +636,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
           })}
 
           {isCounterpartTyping && (
-            <p className="text-xs font-medium text-brand">{counterpartName} is typing...</p>
+            <p className="text-xs font-medium text-brandStrong">{counterpartName} is typing...</p>
           )}
 
           <div ref={endRef} />
@@ -650,7 +650,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
           </span>
           <button
             type="button"
-            className="rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:border-brand/60"
+            className="rounded-lg border border-transparent bg-slate-800/75 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-700/80"
             onClick={handleRemoveAttachment}
           >
             Remove
@@ -658,7 +658,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="flex gap-2">
+      <form onSubmit={handleSendMessage} className="flex flex-col gap-2 sm:flex-row">
         <input
           ref={fileInputRef}
           type="file"
@@ -676,7 +676,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
           onChange={handleDraftChange}
           placeholder="Send a message"
           aria-label="Message text"
-          className="field-control"
+          className="field-control flex-1"
         />
 
         <Button type="submit" disabled={sending || (!draft.trim() && !attachmentFile)}>

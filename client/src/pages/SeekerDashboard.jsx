@@ -23,11 +23,13 @@ import SelectField from "../components/ui/SelectField";
 import SkillsInput from "../components/ui/SkillsInput";
 import {
   DiscoverIcon,
+  SavedIcon,
   MatchesIcon,
   MessagesIcon,
   ProfileIcon
 } from "../components/ui/NavIcons";
 import { useAuth } from "../context/AuthContext";
+import { getProfileCompletionState } from "../utils/profileCompletion";
 
 const createInitialProfile = (user) => ({
   name: user?.seekerProfile?.name || "",
@@ -73,10 +75,12 @@ const SeekerDashboard = () => {
   const { user, setUser } = useAuth();
   const [activeTab, setActiveTab] = useState("discover");
   const [jobs, setJobs] = useState([]);
+  const [savedJobs, setSavedJobs] = useState([]);
   const [matches, setMatches] = useState([]);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [loadingJobs, setLoadingJobs] = useState(true);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [loadingSavedJobs, setLoadingSavedJobs] = useState(false);
+  const [savedJobDetails, setSavedJobDetails] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState(createInitialProfile(user));
   const [profileFiles, setProfileFiles] = useState({ profilePicture: null, cv: null });
@@ -91,6 +95,25 @@ const SeekerDashboard = () => {
   const socketRef = useRef(null);
 
   const activeJob = jobs[0] || null;
+
+  const profileCompletion = useMemo(() => getProfileCompletionState(user), [user]);
+  const profileLocked = !profileCompletion.profileCompleted;
+  const resolvedActiveTab = profileLocked ? "profile" : activeTab;
+  const profileLockMessage = useMemo(() => {
+    if (!profileLocked) {
+      return "";
+    }
+
+    const labels = profileCompletion.missingProfileFields.map((field) => field.label);
+    if (!labels.length) {
+      return "Complete your profile before using Discover, Saved, Matches, and Messages.";
+    }
+
+    const preview = labels.slice(0, 3).join(", ");
+    const extra = labels.length > 3 ? ` +${labels.length - 3} more` : "";
+
+    return `Complete your profile first: ${preview}${extra}.`;
+  }, [profileCompletion.missingProfileFields, profileLocked]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -139,23 +162,39 @@ const SeekerDashboard = () => {
 
   const tabs = useMemo(
     () => [
-      { id: "discover", label: "Discover", icon: <DiscoverIcon /> },
+      { id: "discover", label: "Discover", icon: <DiscoverIcon />, disabled: profileLocked },
+      { id: "saved", label: "Saved", icon: <SavedIcon />, disabled: profileLocked },
       {
         id: "matches",
         label: "Matches",
         icon: <MatchesIcon />,
-        badge: unreadNotificationCount
+        badge: unreadNotificationCount,
+        disabled: profileLocked
       },
-      { id: "messages", label: "Messages", icon: <MessagesIcon /> },
+      { id: "messages", label: "Messages", icon: <MessagesIcon />, disabled: profileLocked },
       { id: "profile", label: "Profile", icon: <ProfileIcon /> }
     ],
-    [unreadNotificationCount]
+    [profileLocked, unreadNotificationCount]
   );
+
+  const handleTabChange = (nextTab) => {
+    if (profileLocked && nextTab !== "profile") {
+      return;
+    }
+
+    setActiveTab(nextTab);
+  };
 
   useEffect(() => {
     setProfileForm(createInitialProfile(user));
     setProfileFiles({ profilePicture: null, cv: null });
   }, [user]);
+
+  useEffect(() => {
+    if (profileLocked && activeTab !== "profile") {
+      setActiveTab("profile");
+    }
+  }, [activeTab, profileLocked]);
 
   useEffect(() => {
     const debounceTimeout = window.setTimeout(() => {
@@ -202,6 +241,19 @@ const SeekerDashboard = () => {
       });
     } catch (error) {
       setError(error.response?.data?.message || "Could not refresh matches");
+    }
+  };
+
+  const loadSavedJobs = async () => {
+    setLoadingSavedJobs(true);
+
+    try {
+      const { data } = await api.get("/saved");
+      setSavedJobs(data.savedJobs || []);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to load saved jobs");
+    } finally {
+      setLoadingSavedJobs(false);
     }
   };
 
@@ -266,12 +318,24 @@ const SeekerDashboard = () => {
   };
 
   useEffect(() => {
+    if (profileLocked) {
+      setSavedJobs([]);
+      setMatches([]);
+      setSelectedMatch(null);
+      setInterviewNotifications([]);
+      setUnreadNotificationCount(0);
+      setLoadingNotifications(false);
+      setLoadingSavedJobs(false);
+      return;
+    }
+
+    loadSavedJobs();
     loadMatches();
     loadInterviewNotifications();
-  }, []);
+  }, [profileLocked]);
 
   useEffect(() => {
-    if (user?.userType !== "seeker") {
+    if (user?.userType !== "seeker" || profileLocked) {
       return undefined;
     }
 
@@ -312,11 +376,17 @@ const SeekerDashboard = () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [user?.userType]);
+  }, [profileLocked, user?.userType]);
 
   useEffect(() => {
+    if (profileLocked) {
+      setJobs([]);
+      setLoadingJobs(false);
+      return;
+    }
+
     loadJobs({ ...discoveryFilters, postcode: debouncedPostcode });
-  }, [debouncedPostcode, discoveryFilters.radius, discoveryFilters.radiusUnit, discoveryFilters.industry]);
+  }, [debouncedPostcode, discoveryFilters.radius, discoveryFilters.radiusUnit, discoveryFilters.industry, profileLocked]);
 
   const handleSwipe = async (direction) => {
     if (!activeJob) return;
@@ -393,12 +463,71 @@ const SeekerDashboard = () => {
     }
   };
 
+  const handleSaveJob = async () => {
+    if (!activeJob) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.post(`/saved/job/${activeJob._id}`);
+      setJobs((prev) => prev.slice(1));
+      setNotice("Job saved to your list");
+      loadSavedJobs();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to save job");
+    }
+  };
+
+  const handleApplySavedJob = async (savedItem) => {
+    const jobId = savedItem?.targetJob?._id;
+    if (!jobId) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const { data } = await api.post(`/swipes/job/${jobId}`, { direction: "right" });
+      setSavedJobs((prev) => prev.filter((item) => item._id !== savedItem._id));
+
+      if (data.matched) {
+        setNotice("Match created. Say hello in chat.");
+        loadMatches();
+      } else {
+        setNotice("Applied from saved jobs");
+      }
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to apply from saved jobs");
+    }
+  };
+
+  const handleRemoveSavedJob = async (savedItemId) => {
+    if (!savedItemId) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.delete(`/saved/${savedItemId}`);
+      setSavedJobs((prev) => prev.filter((item) => item._id !== savedItemId));
+      setNotice("Removed from saved jobs");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to remove saved job");
+    }
+  };
+
   const renderDiscover = () => (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-3">
       <button
         type="button"
         onClick={() => setFiltersExpanded((prev) => !prev)}
-        className="surface-subtle flex items-center justify-between gap-3 px-4 py-3 text-left"
+        className="surface-subtle flex items-center justify-between gap-3 px-4 py-3 text-left transition hover:border-brandStrong/40"
       >
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -492,7 +621,7 @@ const SeekerDashboard = () => {
               <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Discover</p>
               <h2 className="font-display text-2xl text-slate-50">Swipe jobs</h2>
             </div>
-            <span className="chip normal-case tracking-normal">{jobs.length} in queue</span>
+            <span className="chip chip-accent normal-case tracking-normal">{jobs.length} in queue</span>
           </div>
 
           {loadingJobs && (
@@ -508,12 +637,12 @@ const SeekerDashboard = () => {
               </SwipeCard>
               <div className="grid grid-cols-3 gap-2">
                 <Button variant="secondary" onClick={() => handleSwipe("left")}>
-                  Pass
+                  Skip
                 </Button>
-                <Button variant="ghost" onClick={() => setDetailsOpen(true)}>
-                  Details
+                <Button variant="ghost" onClick={handleSaveJob}>
+                  Save
                 </Button>
-                <Button onClick={() => handleSwipe("right")}>Like</Button>
+                <Button onClick={() => handleSwipe("right")}>Apply</Button>
               </div>
             </div>
           )}
@@ -526,21 +655,76 @@ const SeekerDashboard = () => {
         </Card>
       </motion.div>
 
+    </div>
+  );
+
+  const renderSaved = () => (
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Saved</p>
+          <h2 className="font-display text-2xl text-slate-50">Saved jobs</h2>
+        </div>
+        <span className="chip chip-accent normal-case tracking-normal">{savedJobs.length} saved</span>
+      </div>
+
+      {loadingSavedJobs && <LoadingSpinner label="Loading saved jobs" />}
+
+      {!loadingSavedJobs && !savedJobs.length && (
+        <div className="empty-state">No saved jobs yet. Save roles from Discover to review later.</div>
+      )}
+
+      {!loadingSavedJobs && savedJobs.length > 0 && (
+        <div className="space-y-2.5">
+          {savedJobs.map((savedItem) => {
+            const job = savedItem.targetJob;
+            if (!job) {
+              return null;
+            }
+
+            return (
+              <div key={savedItem._id} className="surface-subtle p-4">
+                <div className="space-y-2">
+                  <p className="text-base font-semibold text-slate-100">{job.title}</p>
+                  <p className="text-xs text-slate-300">
+                    {job.company?.companyProfile?.companyName || "Company"} • {job.location}
+                  </p>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {job.industry && (
+                    <span className="chip chip-accent normal-case tracking-normal">{job.industry}</span>
+                  )}
+                  {job.salary && <span className="chip normal-case tracking-normal">{job.salary}</span>}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button onClick={() => handleApplySavedJob(savedItem)}>Apply</Button>
+                  <Button variant="secondary" onClick={() => setSavedJobDetails(job)}>
+                    View details
+                  </Button>
+                  <Button variant="ghost" onClick={() => handleRemoveSavedJob(savedItem._id)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <ModalSheet
-        open={detailsOpen && Boolean(activeJob)}
-        title={activeJob?.title || "Job details"}
-        subtitle={activeJob?.company?.companyProfile?.companyName || ""}
-        onClose={() => setDetailsOpen(false)}
+        open={Boolean(savedJobDetails)}
+        title={savedJobDetails?.title || "Job details"}
+        subtitle={savedJobDetails?.company?.companyProfile?.companyName || ""}
+        onClose={() => setSavedJobDetails(null)}
       >
-        {activeJob && (
+        {savedJobDetails && (
           <div className="space-y-4">
-            <p className="text-sm leading-relaxed text-slate-300">{activeJob.description}</p>
+            <p className="text-sm leading-relaxed text-slate-300">{savedJobDetails.description}</p>
             <div className="flex flex-wrap gap-2">
-              {(activeJob.requiredSkills || []).map((skill) => (
-                <span
-                  key={skill}
-                  className="chip chip-accent normal-case tracking-normal"
-                >
+              {(savedJobDetails.requiredSkills || []).map((skill) => (
+                <span key={skill} className="chip chip-accent normal-case tracking-normal">
                   {skill}
                 </span>
               ))}
@@ -548,7 +732,7 @@ const SeekerDashboard = () => {
           </div>
         )}
       </ModalSheet>
-    </div>
+    </Card>
   );
 
   const renderMatches = () => (
@@ -584,7 +768,7 @@ const SeekerDashboard = () => {
             {interviewNotifications.map((notification) => (
               <div
                 key={notification._id}
-                className={`surface-subtle p-3 ${notification.isRead ? "opacity-80" : "ring-1 ring-brand/35"}`}
+                className={`surface-subtle p-3 ${notification.isRead ? "opacity-85" : "ring-1 ring-brandStrong/35"}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1">
@@ -626,7 +810,7 @@ const SeekerDashboard = () => {
             variant="secondary"
             size="sm"
             disabled={!selectedMatch}
-            onClick={() => setActiveTab("messages")}
+            onClick={() => handleTabChange("messages")}
           >
             Open chat
           </Button>
@@ -650,7 +834,7 @@ const SeekerDashboard = () => {
   );
 
   const renderMessages = () => (
-    <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
+    <div className="grid gap-3 xl:grid-cols-[320px_1fr]">
       <Card className="space-y-3">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Conversations</p>
         <MatchList
@@ -757,6 +941,7 @@ const SeekerDashboard = () => {
 
   const contentByTab = {
     discover: renderDiscover(),
+    saved: renderSaved(),
     matches: renderMatches(),
     messages: renderMessages(),
     profile: renderProfile()
@@ -765,14 +950,14 @@ const SeekerDashboard = () => {
   return (
     <DashboardShell
       title="Seeker Mode"
-      subtitle="Swipe jobs, match instantly, then move to chat."
+      subtitle="Swipe through roles, save what stands out, and jump straight into matched conversations."
       tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      notice={notice}
-      error={error}
+      activeTab={resolvedActiveTab}
+      onTabChange={handleTabChange}
+      notice={profileLocked ? "" : notice}
+      error={profileLocked ? profileLockMessage : error}
     >
-      {contentByTab[activeTab]}
+      {contentByTab[resolvedActiveTab]}
     </DashboardShell>
   );
 };

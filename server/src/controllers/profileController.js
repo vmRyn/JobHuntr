@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Swipe from "../models/Swipe.js";
 import { toPublicUploadPath } from "../middleware/upload.js";
+import { attachProfileCompletion } from "../utils/profileCompletion.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills;
@@ -40,7 +41,7 @@ export const getMyProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.json(user);
+    return res.json(attachProfileCompletion(user));
   } catch (error) {
     return res.status(500).json({ message: "Failed to load profile" });
   }
@@ -97,7 +98,7 @@ export const updateMyProfile = async (req, res) => {
     await user.save();
 
     const safeUser = await User.findById(user._id).select("-password").populate("jobListings");
-    return res.json(safeUser);
+    return res.json(attachProfileCompletion(safeUser));
   } catch (error) {
     return res.status(500).json({ message: "Failed to update profile" });
   }

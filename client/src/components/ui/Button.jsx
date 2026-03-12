@@ -1,14 +1,14 @@
 const baseStyles =
-  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all duration-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+  "inline-flex items-center justify-center gap-2 rounded-2xl border font-semibold tracking-[0.01em] transition-all duration-200 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brandStrong/80 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
 
 const variantStyles = {
   primary:
-    "bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 text-white shadow-glow hover:brightness-110 active:brightness-95",
+    "border-brandStrong/35 bg-gradient-to-r from-brandHot via-brand to-brandStrong text-white shadow-neon hover:-translate-y-0.5 hover:brightness-110 active:translate-y-px active:brightness-95",
   secondary:
-    "border border-white/18 bg-white/8 text-slate-100 hover:border-brand/55 hover:bg-white/12 active:bg-white/16",
-  ghost: "text-slate-200 hover:bg-white/10 hover:text-slate-50 active:bg-white/15",
+    "border-transparent bg-slate-900/78 text-slate-100 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.14)] hover:bg-slate-900/90",
+  ghost: "border-transparent bg-transparent text-slate-200 hover:bg-white/8 hover:text-slate-50",
   danger:
-    "border border-negative/55 bg-negative/20 text-rose-100 hover:bg-negative/30 hover:border-negative/75"
+    "border-negative/55 bg-negative/20 text-rose-100 hover:border-negative/75 hover:bg-negative/30"
 };
 
 const sizeStyles = {

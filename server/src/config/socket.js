@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import { attachProfileCompletion, getProfileCompletionState } from "../utils/profileCompletion.js";
 
 let io;
 
@@ -42,7 +43,12 @@ export const setupSocket = (httpServer) => {
         return next(new Error("Unauthorized"));
       }
 
-      socket.user = user;
+      const completion = getProfileCompletionState(user);
+      if (!completion.profileCompleted) {
+        return next(new Error("Profile setup required"));
+      }
+
+      socket.user = attachProfileCompletion(user);
       return next();
     } catch (error) {
       return next(new Error("Unauthorized"));
