@@ -2,6 +2,12 @@ import { Link, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 
+const keyPoints = [
+  "Swipe through curated opportunities and candidates.",
+  "Unlock conversations only when interest is mutual.",
+  "Move from match to interview without tool switching."
+];
+
 const LandingPage = () => {
   const { user } = useAuth();
 
@@ -10,95 +16,86 @@ const LandingPage = () => {
   }
 
   return (
-    <section className="page-frame flex min-h-screen items-center pb-20 md:pb-12">
-      <div className="grid w-full gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+    <section className="page-frame flex min-h-[calc(100dvh-72px)] items-center">
+      <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:gap-10">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="space-y-8"
+          transition={{ duration: 0.45 }}
+          className="space-y-6 lg:pr-6"
         >
-          <p className="app-badge">Swipe-first hiring platform</p>
+          <p className="app-badge">Simple hiring workflow</p>
 
-          <div className="space-y-4">
-            <h1 className="font-display text-5xl leading-tight text-slate-50 md:text-6xl xl:text-7xl">
-              Find your next <span className="gradient-heading">perfect match</span> in seconds.
-            </h1>
-            <p className="max-w-2xl text-base leading-relaxed text-slate-300 md:text-lg">
-              JobHuntr blends Tinder-style swiping with modern recruiting workflows. Candidates
-              discover roles fast, companies source talent faster, and mutual matches open instant
-              conversations.
-            </p>
-          </div>
+          <h1 className="max-w-2xl font-display text-4xl leading-tight text-slate-50 sm:text-5xl md:text-6xl">
+            Hire and get hired without the noise.
+          </h1>
+
+          <p className="max-w-xl text-base leading-relaxed text-slate-300 md:text-lg">
+            JobHuntr keeps recruiting focused: swipe, match, and chat in one place.
+          </p>
 
           <div className="flex flex-wrap gap-3">
             <Link
               to="/register"
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-brandStrong/35 bg-gradient-to-r from-brandHot via-brand to-brandStrong px-5 text-sm font-semibold text-white shadow-neon transition hover:-translate-y-0.5 hover:brightness-110"
+              className="inline-flex h-12 items-center justify-center rounded-2xl border border-brandStrong/35 bg-gradient-to-r from-brandHot via-brand to-brandStrong px-6 text-sm font-semibold text-white shadow-neon transition hover:brightness-110"
             >
               Start Matching
             </Link>
             <Link
               to="/login"
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/16 bg-slate-900/70 px-5 text-sm font-semibold text-slate-100 transition hover:border-brandStrong/45 hover:bg-slate-900/90"
+              className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/16 bg-slate-900/72 px-6 text-sm font-semibold text-slate-100 transition hover:border-brandStrong/45"
             >
               Log In
             </Link>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="surface-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Swipe</p>
-              <p className="mt-1 text-lg font-semibold text-slate-50">Faster Discovery</p>
-            </div>
-            <div className="surface-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Match</p>
-              <p className="mt-1 text-lg font-semibold text-slate-50">Mutual Intent</p>
-            </div>
-            <div className="surface-subtle p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Chat</p>
-              <p className="mt-1 text-lg font-semibold text-slate-50">Instant Messaging</p>
-            </div>
-          </div>
+          <ul className="space-y-2 text-sm text-slate-300">
+            {keyPoints.map((point) => (
+              <li key={point} className="flex items-start gap-2">
+                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-brandStrong" aria-hidden />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="relative mx-auto w-full max-w-lg"
+        <motion.aside
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08 }}
+          className="surface-card mx-auto w-full max-w-[30rem] space-y-4 p-5 md:p-6"
         >
-          <span aria-hidden className="hero-orb hero-orb-one" />
-          <span aria-hidden className="hero-orb hero-orb-two" />
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Live swipe preview</p>
 
-          <div className="surface-card relative space-y-4 p-5 md:p-6">
-            <p className="app-badge">Live swipe deck</p>
-            <div className="surface-subtle space-y-3 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Now reviewing</p>
-              <h2 className="font-display text-3xl text-slate-50">Senior Product Designer</h2>
-              <p className="text-sm text-slate-300">NovaLoop • Hybrid • London • £85k-£100k</p>
+          <div className="relative h-[22rem] sm:h-[24rem]">
+            <div className="surface-subtle relative z-10 flex h-full flex-col p-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-300">Now reviewing</p>
+                <h2 className="mt-1 font-display text-2xl text-slate-50">Senior Product Designer</h2>
+                <p className="mt-1 text-sm text-slate-300">Atlas Robotics • Hybrid • Manchester</p>
+                <p className="text-sm text-slate-300">£82k-£98k</p>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <span className="chip chip-accent normal-case tracking-normal">Figma</span>
+                <span className="chip chip-accent normal-case tracking-normal">UX Strategy</span>
                 <span className="chip chip-accent normal-case tracking-normal">Design Systems</span>
-                <span className="chip chip-accent normal-case tracking-normal">UX Research</span>
+              </div>
+
+              <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                Lead product direction across web and mobile while shaping a scalable design system.
+              </p>
+
+              <div className="mt-auto grid grid-cols-3 gap-2 pt-3">
+                <span className="chip chip-negative justify-center py-2 text-center">Skip</span>
+                <span className="chip justify-center py-2 text-center">Save</span>
+                <span className="chip chip-positive justify-center py-2 text-center">Match</span>
               </div>
             </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="chip chip-negative justify-center py-2 text-center">Skip</div>
-              <div className="chip justify-center py-2 text-center">Save</div>
-              <div className="chip chip-positive justify-center py-2 text-center">Match</div>
-            </div>
-
-            <p className="text-center text-xs text-slate-300">Built mobile-first, polished for desktop.</p>
           </div>
 
-          <div className="surface-subtle absolute -bottom-7 -right-2 hidden w-64 space-y-2 p-3 md:block">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Match alert</p>
-            <p className="text-sm font-semibold text-slate-50">You and NovaLoop matched.</p>
-            <p className="text-xs text-slate-300">Open chat and schedule a first interview instantly.</p>
-          </div>
-        </motion.div>
+          <p className="text-sm text-slate-300">One card at a time. Decide in seconds.</p>
+        </motion.aside>
       </div>
     </section>
   );
