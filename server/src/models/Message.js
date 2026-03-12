@@ -56,6 +56,48 @@ const messageReactionSchema = new Schema(
   { _id: false }
 );
 
+const messageModerationSchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: ["clean", "flagged", "hidden", "deleted"],
+      default: "clean"
+    },
+    riskScore: {
+      type: Number,
+      default: 0
+    },
+    riskLevel: {
+      type: String,
+      enum: ["low", "medium", "high", "critical"],
+      default: "low"
+    },
+    flaggedKeywords: {
+      type: [String],
+      default: []
+    },
+    matchedPatterns: {
+      type: [String],
+      default: []
+    },
+    flaggedByAutomation: {
+      type: Boolean,
+      default: false
+    },
+    flaggedAt: {
+      type: Date,
+      default: null
+    },
+    adminAction: {
+      action: { type: String, trim: true, default: "" },
+      reason: { type: String, trim: true, default: "" },
+      admin: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      actedAt: { type: Date, default: null }
+    }
+  },
+  { _id: false }
+);
+
 const messageSchema = new Schema(
   {
     match: {
@@ -94,6 +136,10 @@ const messageSchema = new Schema(
     reactions: {
       type: [messageReactionSchema],
       default: []
+    },
+    moderation: {
+      type: messageModerationSchema,
+      default: () => ({})
     }
   },
   { timestamps: true }

@@ -1,7 +1,13 @@
 import Job from "../models/Job.js";
+import Report from "../models/Report.js";
 import Swipe from "../models/Swipe.js";
 import User from "../models/User.js";
 import { isValidJobIndustry } from "../utils/jobIndustries.js";
+import {
+  analyzeJobQuality,
+  detectPotentialDuplicateJob,
+  evaluateCompanyRiskSignals
+} from "../utils/moderationSignals.js";
 import {
   geocodePostcode,
   normalizePostcode,
@@ -34,6 +40,64 @@ const parseSkills = (skills) => {
       .filter(Boolean);
   }
   return [];
+};
+
+const escapeRegExp = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const evaluateCompanyProfileQuality = (companyProfile = {}) => {
+  let score = 0;
+
+  if ((companyProfile.companyName || "").trim().length >= 2) {
+    score += 35;
+  }
+
+  const descriptionLength = (companyProfile.description || "").trim().length;
+  if (descriptionLength >= 220) {
+    score += 45;
+  } else if (descriptionLength >= 120) {
+    score += 32;
+  } else if (descriptionLength >= 60) {
+    score += 18;
+  }
+
+  if ((companyProfile.industry || "").trim()) {
+    score += 20;
+  }
+
+  return Math.min(100, score);
+};
+
+const buildJobModerationDecision = ({
+  quality,
+  risk,
+  duplicateJob,
+  previousFlags = []
+}) => {
+  const flags = [...new Set([...previousFlags, ...(quality.flags || []), ...(risk.signals || [])])];
+
+  if (duplicateJob) {
+    flags.push("possible_duplicate");
+  }
+
+  const normalizedFlags = [...new Set(flags)];
+
+  const requiresManualReview =
+    Boolean(duplicateJob) ||
+    quality.qualityScore < 45 ||
+    risk.highRisk ||
+    normalizedFlags.includes("misleading_language") ||
+    normalizedFlags.includes("high_posting_velocity");
+
+  return {
+    flags: normalizedFlags,
+    qualityScore: quality.qualityScore,
+    requiresManualReview,
+    status: requiresManualReview ? "pending_review" : "approved",
+    duplicateOf: duplicateJob?._id || null,
+    notes: requiresManualReview
+      ? "Pending admin review due to automated moderation signals"
+      : ""
+  };
 };
 
 const resolvePostcodeCoordinates = async (postcode) => {
@@ -81,6 +145,7 @@ export const getJobsFeed = async (req, res) => {
 
     const jobQuery = {
       isActive: true,
+      "moderation.status": "approved",
       _id: { $nin: swipedJobIds }
     };
 
@@ -146,6 +211,17 @@ export const getJobById = async (req, res) => {
       return res.status(404).json({ message: "Job not found" });
     }
 
+    if (
+      req.user.userType === "seeker" &&
+      (!job.isActive || job.moderation?.status !== "approved")
+    ) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    if (req.user.userType === "company" && String(job.company?._id || job.company) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     return res.json(job);
   } catch (error) {
     return res.status(500).json({ message: "Failed to load job" });
@@ -176,6 +252,50 @@ export const createJob = async (req, res) => {
       return res.status(400).json({ message: postcodeLocation.error });
     }
 
+    const parsedRequiredSkills = parseSkills(requiredSkills);
+    const company = await User.findById(req.user._id).select("companyProfile createdAt moderation");
+    const jobsCreatedLast24h = await Job.countDocuments({
+      company: req.user._id,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    const existingJobs = await Job.find({
+      company: req.user._id,
+      title: new RegExp(`^${escapeRegExp(title.trim())}$`, "i")
+    })
+      .sort({ createdAt: -1 })
+      .limit(25)
+      .lean();
+
+    const quality = analyzeJobQuality({
+      title,
+      description,
+      requiredSkills: parsedRequiredSkills,
+      industry,
+      location
+    });
+
+    const companyRisk = evaluateCompanyRiskSignals({
+      company,
+      jobsCreatedLast24h,
+      profileQualityScore: evaluateCompanyProfileQuality(company?.companyProfile)
+    });
+
+    const duplicateJob = detectPotentialDuplicateJob({
+      jobInput: {
+        title,
+        location,
+        postcode: postcodeLocation.postcode
+      },
+      existingJobs
+    });
+
+    const moderationDecision = buildJobModerationDecision({
+      quality,
+      risk: companyRisk,
+      duplicateJob
+    });
+
     const job = await Job.create({
       company: req.user._id,
       title,
@@ -185,12 +305,65 @@ export const createJob = async (req, res) => {
       location,
       postcode: postcodeLocation.postcode,
       coordinates: postcodeLocation.coordinates,
-      requiredSkills: parseSkills(requiredSkills)
+      requiredSkills: parsedRequiredSkills,
+      isActive: moderationDecision.requiresManualReview ? false : true,
+      moderation: {
+        status: moderationDecision.status,
+        qualityScore: moderationDecision.qualityScore,
+        flags: moderationDecision.flags,
+        duplicateOf: moderationDecision.duplicateOf,
+        notes: moderationDecision.notes
+      }
     });
 
     await User.findByIdAndUpdate(req.user._id, {
       $addToSet: { jobListings: job._id }
     });
+
+    if (companyRisk.riskScore > 0) {
+      await User.findByIdAndUpdate(req.user._id, {
+        $inc: {
+          "moderation.suspiciousCompanyScore": Math.max(1, Math.round(companyRisk.riskScore / 5))
+        },
+        $addToSet: {
+          "moderation.riskSignals": {
+            $each: companyRisk.signals
+          }
+        }
+      });
+    }
+
+    if (moderationDecision.requiresManualReview) {
+      await Report.create({
+        sourceType: "automation",
+        targetType: "job",
+        targetJob: job._id,
+        targetUser: req.user._id,
+        reasonCategory: duplicateJob
+          ? "duplicate"
+          : moderationDecision.flags.includes("misleading_language")
+            ? "misleading_job"
+            : "other",
+        details: `Automated job moderation triggered. Score ${moderationDecision.qualityScore}.`,
+        priority:
+          moderationDecision.flags.includes("misleading_language") || companyRisk.riskScore >= 65
+            ? "high"
+            : "medium",
+        automationSignals: moderationDecision.flags
+      });
+    }
+
+    if (companyRisk.highRisk) {
+      await Report.create({
+        sourceType: "automation",
+        targetType: "company",
+        targetUser: req.user._id,
+        reasonCategory: "other",
+        details: "Automated company risk alert triggered due to posting behavior and profile quality.",
+        priority: companyRisk.riskScore >= 70 ? "critical" : "high",
+        automationSignals: companyRisk.signals
+      });
+    }
 
     return res.status(201).json(job);
   } catch (error) {
@@ -237,9 +410,115 @@ export const updateJob = async (req, res) => {
     }
 
     if (requiredSkills !== undefined) job.requiredSkills = parseSkills(requiredSkills);
-    if (isActive !== undefined) job.isActive = Boolean(isActive);
+
+    const company = await User.findById(req.user._id).select("companyProfile createdAt moderation");
+    const jobsCreatedLast24h = await Job.countDocuments({
+      company: req.user._id,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    const quality = analyzeJobQuality({
+      title: job.title,
+      description: job.description,
+      requiredSkills: job.requiredSkills,
+      industry: job.industry,
+      location: job.location
+    });
+
+    const companyRisk = evaluateCompanyRiskSignals({
+      company,
+      jobsCreatedLast24h,
+      profileQualityScore: evaluateCompanyProfileQuality(company?.companyProfile)
+    });
+
+    const existingJobs = await Job.find({
+      company: req.user._id,
+      _id: { $ne: job._id },
+      title: new RegExp(`^${escapeRegExp(job.title.trim())}$`, "i")
+    })
+      .sort({ createdAt: -1 })
+      .limit(25)
+      .lean();
+
+    const duplicateJob = detectPotentialDuplicateJob({
+      jobInput: {
+        title: job.title,
+        location: job.location,
+        postcode: job.postcode
+      },
+      existingJobs
+    });
+
+    const moderationDecision = buildJobModerationDecision({
+      quality,
+      risk: companyRisk,
+      duplicateJob,
+      previousFlags: job.moderation?.flags || []
+    });
+
+    job.moderation = {
+      ...(job.moderation || {}),
+      status: moderationDecision.status,
+      qualityScore: moderationDecision.qualityScore,
+      flags: moderationDecision.flags,
+      duplicateOf: moderationDecision.duplicateOf,
+      notes: moderationDecision.notes,
+      reviewedBy: moderationDecision.requiresManualReview ? null : job.moderation?.reviewedBy || null,
+      reviewedAt: moderationDecision.requiresManualReview ? null : job.moderation?.reviewedAt || null
+    };
+
+    if (isActive !== undefined && !moderationDecision.requiresManualReview) {
+      job.isActive = Boolean(isActive);
+    }
+
+    if (moderationDecision.requiresManualReview) {
+      job.isActive = false;
+    }
 
     await job.save();
+
+    if (moderationDecision.requiresManualReview) {
+      await Report.create({
+        sourceType: "automation",
+        targetType: "job",
+        targetJob: job._id,
+        targetUser: req.user._id,
+        reasonCategory: duplicateJob
+          ? "duplicate"
+          : moderationDecision.flags.includes("misleading_language")
+            ? "misleading_job"
+            : "other",
+        details: `Automated moderation triggered on job update. Score ${moderationDecision.qualityScore}.`,
+        priority:
+          moderationDecision.flags.includes("misleading_language") || companyRisk.riskScore >= 65
+            ? "high"
+            : "medium",
+        automationSignals: moderationDecision.flags
+      });
+    }
+
+    if (companyRisk.highRisk) {
+      await User.findByIdAndUpdate(req.user._id, {
+        $inc: {
+          "moderation.suspiciousCompanyScore": Math.max(1, Math.round(companyRisk.riskScore / 5))
+        },
+        $addToSet: {
+          "moderation.riskSignals": {
+            $each: companyRisk.signals
+          }
+        }
+      });
+
+      await Report.create({
+        sourceType: "automation",
+        targetType: "company",
+        targetUser: req.user._id,
+        reasonCategory: "other",
+        details: "Automated company risk alert triggered on job update.",
+        priority: companyRisk.riskScore >= 70 ? "critical" : "high",
+        automationSignals: companyRisk.signals
+      });
+    }
 
     return res.json(job);
   } catch (error) {

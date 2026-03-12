@@ -12,10 +12,23 @@ const LoginPage = () => {
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [appeal, setAppeal] = useState({ email: "", appealReason: "" });
+  const [appealLoading, setAppealLoading] = useState(false);
+  const [appealNotice, setAppealNotice] = useState("");
+  const [appealNoticeType, setAppealNoticeType] = useState("success");
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "email") {
+      setAppeal((prev) => ({ ...prev, email: value }));
+    }
+  };
+
+  const handleAppealChange = (event) => {
+    const { name, value } = event.target;
+    setAppeal((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (event) => {
@@ -32,6 +45,40 @@ const LoginPage = () => {
       setError(requestError.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSubmitAppeal = async (event) => {
+    event.preventDefault();
+    setAppealLoading(true);
+    setAppealNotice("");
+    setAppealNoticeType("success");
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/appeals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: appeal.email.trim(),
+          appealReason: appeal.appealReason.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || "Failed to submit appeal");
+      }
+
+      setAppealNotice("Appeal submitted. An admin will review your account status.");
+      setAppealNoticeType("success");
+      setAppeal((prev) => ({ ...prev, appealReason: "" }));
+    } catch (requestError) {
+      setAppealNotice(requestError.message || "Failed to submit appeal. Please try again.");
+      setAppealNoticeType("error");
+    } finally {
+      setAppealLoading(false);
     }
   };
 
@@ -96,6 +143,41 @@ const LoginPage = () => {
             </form>
 
             {error && <p className="status-error">{error}</p>}
+
+            <Card className="space-y-3 p-4">
+              <p className="text-xs uppercase tracking-[0.15em] text-slate-300">Account suspended?</p>
+              <p className="text-xs text-slate-300">
+                Submit an appeal for review if your account has been suspended.
+              </p>
+              <form onSubmit={handleSubmitAppeal} className="space-y-2.5">
+                <InputField
+                  label="Account email"
+                  type="email"
+                  name="email"
+                  value={appeal.email}
+                  onChange={handleAppealChange}
+                  placeholder="you@example.com"
+                  required
+                />
+                <InputField
+                  as="textarea"
+                  label="Appeal reason"
+                  name="appealReason"
+                  value={appeal.appealReason}
+                  onChange={handleAppealChange}
+                  placeholder="Tell us why your account should be reinstated"
+                  required
+                />
+                <Button className="w-full" type="submit" variant="secondary" disabled={appealLoading}>
+                  {appealLoading ? "Submitting..." : "Submit appeal"}
+                </Button>
+              </form>
+              {appealNotice && (
+                <p className={appealNoticeType === "error" ? "status-error" : "status-success"}>
+                  {appealNotice}
+                </p>
+              )}
+            </Card>
 
             <p className="text-sm text-slate-300">
               New here?{" "}

@@ -142,6 +142,14 @@ const getSenderLabel = (message, currentUserId, fallbackName) => {
   return fallbackName || "Match";
 };
 
+const allowedReportCategories = new Set([
+  "spam",
+  "scam",
+  "harassment",
+  "hate_or_abuse",
+  "other"
+]);
+
 const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
@@ -463,6 +471,33 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
     }
   };
 
+  const handleReportMessage = async (messageId) => {
+    if (!messageId) {
+      return;
+    }
+
+    const reasonInput = (window.prompt(
+      "Reason category (spam, scam, harassment, hate_or_abuse, other)",
+      "spam"
+    ) || "spam")
+      .trim()
+      .toLowerCase();
+
+    const reasonCategory = allowedReportCategories.has(reasonInput) ? reasonInput : "other";
+    const details = window.prompt("Add details (optional)", "") || "";
+
+    try {
+      await api.post("/reports", {
+        targetType: "message",
+        targetId: messageId,
+        reasonCategory,
+        details
+      });
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to submit message report");
+    }
+  };
+
   if (!selectedMatch) {
     return (
       <div className="empty-state">
@@ -643,6 +678,15 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                         {emoji}
                       </button>
                     ))}
+
+                    <button
+                      type="button"
+                      aria-label="Report message"
+                      className="rounded-full border border-transparent bg-negative/20 px-2 py-0.5 text-[11px] font-semibold text-rose-100 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.3)] hover:bg-negative/30"
+                      onClick={() => handleReportMessage(message._id)}
+                    >
+                      Report
+                    </button>
                   </div>
                 </div>
               </div>

@@ -153,3 +153,57 @@ export const AdminAuditIcon = () => (
     />
   </svg>
 );
+
+export const AdminReportsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" className={iconClassName} aria-hidden>
+    <path
+      d="M6.5 4.5h11A1.5 1.5 0 0 1 19 6v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 18V6a1.5 1.5 0 0 1 1.5-1.5Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M8.5 9h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M8.5 13h5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path d="M8.5 16.5h3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+
+export const AdminAppealsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" className={iconClassName} aria-hidden>
+    <path
+      d="M8.5 10.5a3.5 3.5 0 1 1 7 0c0 1.5-.8 2.6-2.3 3.5-.9.5-1.2 1-1.2 1.8"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M12 19h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path
+      d="M12 3.5 4.5 6.3v5.5c0 4.4 3 8 7.5 9.2 4.5-1.2 7.5-4.8 7.5-9.2V6.3L12 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const AdminSafetyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" className={iconClassName} aria-hidden>
+    <path
+      d="M12 3.5 4 6.5v5.7c0 4.6 3.1 8.4 8 9.8 4.9-1.4 8-5.2 8-9.8V6.5l-8-3Z"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M9.2 12.2 11 14l3.8-3.9"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);

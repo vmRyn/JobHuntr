@@ -38,6 +38,19 @@ const adminProfileSchema = new Schema(
   { _id: false }
 );
 
+const moderationSchema = new Schema(
+  {
+    riskScore: { type: Number, default: 0 },
+    flaggedMessageCount: { type: Number, default: 0 },
+    abusiveActionCount: { type: Number, default: 0 },
+    suspiciousCompanyScore: { type: Number, default: 0 },
+    riskSignals: { type: [String], default: [] },
+    chatRestrictedUntil: { type: Date, default: null },
+    chatRestrictionReason: { type: String, trim: true, default: "" }
+  },
+  { _id: false }
+);
+
 const userSchema = new Schema(
   {
     userType: {
@@ -78,6 +91,10 @@ const userSchema = new Schema(
       type: String,
       trim: true,
       default: ""
+    },
+    moderation: {
+      type: moderationSchema,
+      default: () => ({})
     },
     jobListings: [
       {

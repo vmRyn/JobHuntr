@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
+import Appeal from "../models/Appeal.js";
 import AdminAuditLog from "../models/AdminAuditLog.js";
 import Job from "../models/Job.js";
 import Match from "../models/Match.js";
+import Message from "../models/Message.js";
+import Report from "../models/Report.js";
 import User from "../models/User.js";
 
 const toPositiveInt = (value, fallback, maxValue = 100) => {
@@ -38,12 +41,20 @@ const getCompanySummary = (company, activeJobCount = 0) => ({
   activeJobCount
 });
 
-const addAuditLog = async ({ adminId, actionType, targetUser, targetJob, metadata = {} }) => {
+const addAuditLog = async ({
+  adminId,
+  actionType,
+  targetUser,
+  targetJob,
+  targetMessage,
+  metadata = {}
+}) => {
   await AdminAuditLog.create({
     admin: adminId,
     actionType,
     targetUser: targetUser || null,
     targetJob: targetJob || null,
+    targetMessage: targetMessage || null,
     metadata
   });
 };
@@ -59,7 +70,11 @@ export const getAdminOverview = async (_req, res) => {
       suspendedUsers,
       activeJobs,
       inactiveJobs,
-      totalMatches
+      totalMatches,
+      openReports,
+      pendingAppeals,
+      flaggedMessages,
+      jobsPendingReview
     ] = await Promise.all([
       User.countDocuments({ userType: "company" }),
       User.countDocuments({ userType: "seeker" }),
@@ -76,7 +91,11 @@ export const getAdminOverview = async (_req, res) => {
       User.countDocuments({ isSuspended: true }),
       Job.countDocuments({ isActive: true }),
       Job.countDocuments({ isActive: false }),
-      Match.countDocuments()
+      Match.countDocuments(),
+      Report.countDocuments({ status: { $in: ["open", "in_review"] } }),
+      Appeal.countDocuments({ status: "pending" }),
+      Message.countDocuments({ "moderation.status": { $in: ["flagged", "hidden", "deleted"] } }),
+      Job.countDocuments({ "moderation.status": { $in: ["pending_review", "flagged"] } })
     ]);
 
     return res.json({
@@ -89,7 +108,11 @@ export const getAdminOverview = async (_req, res) => {
         suspendedUsers,
         activeJobs,
         inactiveJobs,
-        totalMatches
+        totalMatches,
+        openReports,
+        pendingAppeals,
+        flaggedMessages,
+        jobsPendingReview
       }
     });
   } catch (error) {
@@ -298,6 +321,10 @@ export const listJobs = async (req, res) => {
       filters.isActive = true;
     } else if (status === "inactive") {
       filters.isActive = false;
+    } else if (status === "review") {
+      filters["moderation.status"] = { $in: ["pending_review", "flagged"] };
+    } else if (["pending_review", "flagged", "rejected", "approved"].includes(status)) {
+      filters["moderation.status"] = status;
     }
 
     if (companyId && mongoose.Types.ObjectId.isValid(companyId)) {
@@ -336,6 +363,11 @@ export const listJobs = async (req, res) => {
         salary: job.salary || "",
         postcode: job.postcode || "",
         isActive: Boolean(job.isActive),
+        moderationStatus: job.moderation?.status || "approved",
+        moderationFlags: Array.isArray(job.moderation?.flags) ? job.moderation.flags : [],
+        qualityScore: typeof job.moderation?.qualityScore === "number" ? job.moderation.qualityScore : 100,
+        duplicateOf: job.moderation?.duplicateOf ? String(job.moderation.duplicateOf) : "",
+        moderationNotes: job.moderation?.notes || "",
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
         company: {
@@ -376,6 +408,15 @@ export const setJobStatus = async (req, res) => {
     }
 
     job.isActive = isActive;
+    if (isActive && job.moderation?.status !== "approved") {
+      job.moderation = {
+        ...(job.moderation || {}),
+        status: "approved",
+        reviewedBy: req.user._id,
+        reviewedAt: new Date(),
+        notes: "Activated by admin moderation action"
+      };
+    }
     await job.save();
 
     await addAuditLog({
@@ -401,6 +442,533 @@ export const setJobStatus = async (req, res) => {
   }
 };
 
+export const setJobModeration = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { moderationStatus, notes } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(400).json({ message: "Invalid job id" });
+    }
+
+    if (!["approved", "pending_review", "flagged", "rejected"].includes(moderationStatus)) {
+      return res.status(400).json({ message: "Invalid moderationStatus" });
+    }
+
+    const job = await Job.findById(jobId).populate(
+      "company",
+      "email companyProfile.companyName companyProfile.isVerified"
+    );
+
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    job.moderation = {
+      ...(job.moderation || {}),
+      status: moderationStatus,
+      notes: typeof notes === "string" ? notes.trim() : "",
+      reviewedBy: req.user._id,
+      reviewedAt: new Date()
+    };
+
+    if (moderationStatus === "approved") {
+      job.isActive = true;
+    } else if (moderationStatus === "pending_review" || moderationStatus === "rejected") {
+      job.isActive = false;
+    }
+
+    await job.save();
+
+    await addAuditLog({
+      adminId: req.user._id,
+      actionType: "review_job_moderation",
+      targetUser: job.company?._id || null,
+      targetJob: job._id,
+      metadata: {
+        title: job.title,
+        moderationStatus,
+        notes: job.moderation?.notes || ""
+      }
+    });
+
+    return res.json({
+      data: {
+        id: String(job._id),
+        isActive: job.isActive,
+        moderationStatus: job.moderation?.status || "approved",
+        moderationNotes: job.moderation?.notes || ""
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to review job moderation" });
+  }
+};
+
+export const listReports = async (req, res) => {
+  try {
+    const page = toPositiveInt(req.query.page, 1, 100000);
+    const limit = toPositiveInt(req.query.limit, 20, 100);
+    const status = typeof req.query.status === "string" ? req.query.status.toLowerCase() : "all";
+    const targetType = typeof req.query.targetType === "string" ? req.query.targetType.toLowerCase() : "all";
+    const priority = typeof req.query.priority === "string" ? req.query.priority.toLowerCase() : "all";
+
+    const filters = {};
+
+    if (["open", "in_review", "resolved", "dismissed"].includes(status)) {
+      filters.status = status;
+    }
+
+    if (["job", "company", "message"].includes(targetType)) {
+      filters.targetType = targetType;
+    }
+
+    if (["low", "medium", "high", "critical"].includes(priority)) {
+      filters.priority = priority;
+    }
+
+    const [total, reports] = await Promise.all([
+      Report.countDocuments(filters),
+      Report.find(filters)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("reporter", "email userType")
+        .populate("targetUser", "email userType companyProfile.companyName seekerProfile.name")
+        .populate("targetJob", "title")
+        .populate("targetMessage", "text moderation sender")
+        .lean()
+    ]);
+
+    return res.json({
+      data: reports.map((report) => ({
+        id: String(report._id),
+        sourceType: report.sourceType,
+        targetType: report.targetType,
+        reasonCategory: report.reasonCategory,
+        details: report.details || "",
+        priority: report.priority,
+        status: report.status,
+        automationSignals: report.automationSignals || [],
+        createdAt: report.createdAt,
+        reporter: report.reporter
+          ? {
+              id: String(report.reporter._id),
+              email: report.reporter.email,
+              userType: report.reporter.userType
+            }
+          : null,
+        targetUser: report.targetUser
+          ? {
+              id: String(report.targetUser._id),
+              email: report.targetUser.email,
+              userType: report.targetUser.userType,
+              displayName:
+                report.targetUser.userType === "company"
+                  ? report.targetUser.companyProfile?.companyName || "Company"
+                  : report.targetUser.seekerProfile?.name || "User"
+            }
+          : null,
+        targetJob: report.targetJob
+          ? {
+              id: String(report.targetJob._id),
+              title: report.targetJob.title
+            }
+          : null,
+        targetMessage: report.targetMessage
+          ? {
+              id: String(report.targetMessage._id),
+              text: report.targetMessage.text || "",
+              moderationStatus: report.targetMessage.moderation?.status || "clean"
+            }
+          : null,
+        reviewedAt: report.reviewedAt,
+        resolutionNote: report.resolutionNote || "",
+        resolutionAction: report.resolutionAction || ""
+      })),
+      pagination: buildPagination(page, limit, total)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to load reports" });
+  }
+};
+
+export const reviewReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { status, resolutionNote, resolutionAction } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({ message: "Invalid report id" });
+    }
+
+    if (!["in_review", "resolved", "dismissed"].includes(status)) {
+      return res.status(400).json({ message: "Invalid report status" });
+    }
+
+    const report = await Report.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    report.status = status;
+    report.reviewedBy = req.user._id;
+    report.reviewedAt = new Date();
+    report.resolutionNote = typeof resolutionNote === "string" ? resolutionNote.trim() : "";
+    report.resolutionAction = typeof resolutionAction === "string" ? resolutionAction.trim() : "";
+    await report.save();
+
+    await addAuditLog({
+      adminId: req.user._id,
+      actionType: "review_report",
+      targetUser: report.targetUser || null,
+      targetJob: report.targetJob || null,
+      targetMessage: report.targetMessage || null,
+      metadata: {
+        reportId: String(report._id),
+        status: report.status,
+        resolutionAction: report.resolutionAction || ""
+      }
+    });
+
+    return res.json({
+      data: {
+        id: String(report._id),
+        status: report.status,
+        reviewedAt: report.reviewedAt,
+        resolutionNote: report.resolutionNote,
+        resolutionAction: report.resolutionAction
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to review report" });
+  }
+};
+
+export const listAppeals = async (req, res) => {
+  try {
+    const page = toPositiveInt(req.query.page, 1, 100000);
+    const limit = toPositiveInt(req.query.limit, 20, 100);
+    const status = typeof req.query.status === "string" ? req.query.status.toLowerCase() : "all";
+
+    const filters = {};
+    if (["pending", "approved", "rejected"].includes(status)) {
+      filters.status = status;
+    }
+
+    const [total, appeals] = await Promise.all([
+      Appeal.countDocuments(filters),
+      Appeal.find(filters)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("appellant", "email userType companyProfile.companyName seekerProfile.name")
+        .lean()
+    ]);
+
+    return res.json({
+      data: appeals.map((appeal) => ({
+        id: String(appeal._id),
+        email: appeal.email,
+        userType: appeal.userType,
+        status: appeal.status,
+        sourceType: appeal.sourceType,
+        suspensionReasonSnapshot: appeal.suspensionReasonSnapshot || "",
+        appealReason: appeal.appealReason,
+        createdAt: appeal.createdAt,
+        reviewedAt: appeal.reviewedAt,
+        resolutionNote: appeal.resolutionNote || "",
+        appellant: appeal.appellant
+          ? {
+              id: String(appeal.appellant._id),
+              email: appeal.appellant.email,
+              userType: appeal.appellant.userType,
+              displayName:
+                appeal.appellant.userType === "company"
+                  ? appeal.appellant.companyProfile?.companyName || "Company"
+                  : appeal.appellant.seekerProfile?.name || "User"
+            }
+          : null
+      })),
+      pagination: buildPagination(page, limit, total)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to load appeals" });
+  }
+};
+
+export const reviewAppeal = async (req, res) => {
+  try {
+    const { appealId } = req.params;
+    const { status, resolutionNote } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(appealId)) {
+      return res.status(400).json({ message: "Invalid appeal id" });
+    }
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid appeal status" });
+    }
+
+    const appeal = await Appeal.findById(appealId);
+    if (!appeal) {
+      return res.status(404).json({ message: "Appeal not found" });
+    }
+
+    appeal.status = status;
+    appeal.reviewedBy = req.user._id;
+    appeal.reviewedAt = new Date();
+    appeal.resolutionNote = typeof resolutionNote === "string" ? resolutionNote.trim() : "";
+    await appeal.save();
+
+    let unsuspended = false;
+    if (status === "approved") {
+      const targetUser = await User.findOne({ email: appeal.email }).select(
+        "_id isSuspended suspensionReason moderation"
+      );
+
+      if (targetUser?.isSuspended) {
+        targetUser.isSuspended = false;
+        targetUser.suspensionReason = "";
+        targetUser.moderation = {
+          ...(targetUser.moderation || {}),
+          chatRestrictedUntil: null,
+          chatRestrictionReason: ""
+        };
+        await targetUser.save();
+        unsuspended = true;
+      }
+    }
+
+    await addAuditLog({
+      adminId: req.user._id,
+      actionType: "review_appeal",
+      targetUser: appeal.appellant || null,
+      metadata: {
+        appealId: String(appeal._id),
+        status,
+        unsuspended
+      }
+    });
+
+    return res.json({
+      data: {
+        id: String(appeal._id),
+        status: appeal.status,
+        reviewedAt: appeal.reviewedAt,
+        resolutionNote: appeal.resolutionNote,
+        unsuspended
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to review appeal" });
+  }
+};
+
+export const listFlaggedMessages = async (req, res) => {
+  try {
+    const page = toPositiveInt(req.query.page, 1, 100000);
+    const limit = toPositiveInt(req.query.limit, 20, 100);
+    const status = typeof req.query.status === "string" ? req.query.status.toLowerCase() : "all";
+
+    const filters = {
+      "moderation.status": { $in: ["flagged", "hidden", "deleted"] }
+    };
+
+    if (["flagged", "hidden", "deleted"].includes(status)) {
+      filters["moderation.status"] = status;
+    }
+
+    const [total, messages] = await Promise.all([
+      Message.countDocuments(filters),
+      Message.find(filters)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate("sender", "email userType companyProfile.companyName seekerProfile.name moderation")
+        .populate("receiver", "email userType companyProfile.companyName seekerProfile.name")
+        .lean()
+    ]);
+
+    return res.json({
+      data: messages.map((message) => ({
+        id: String(message._id),
+        matchId: String(message.match),
+        text: message.text || "",
+        createdAt: message.createdAt,
+        moderationStatus: message.moderation?.status || "clean",
+        riskScore: message.moderation?.riskScore || 0,
+        riskLevel: message.moderation?.riskLevel || "low",
+        flaggedKeywords: message.moderation?.flaggedKeywords || [],
+        matchedPatterns: message.moderation?.matchedPatterns || [],
+        sender: message.sender
+          ? {
+              id: String(message.sender._id),
+              email: message.sender.email,
+              userType: message.sender.userType,
+              displayName:
+                message.sender.userType === "company"
+                  ? message.sender.companyProfile?.companyName || "Company"
+                  : message.sender.seekerProfile?.name || "User",
+              chatRestrictedUntil: message.sender.moderation?.chatRestrictedUntil || null
+            }
+          : null
+      })),
+      pagination: buildPagination(page, limit, total)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to load flagged messages" });
+  }
+};
+
+export const moderateMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { action, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      return res.status(400).json({ message: "Invalid message id" });
+    }
+
+    const allowedActions = [
+      "hide",
+      "restore",
+      "delete",
+      "restrict_sender_24h",
+      "restrict_sender_72h",
+      "clear_flags"
+    ];
+
+    if (!allowedActions.includes(action)) {
+      return res.status(400).json({ message: "Invalid moderation action" });
+    }
+
+    const message = await Message.findById(messageId).populate("sender", "moderation");
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    const actionReason = typeof reason === "string" ? reason.trim() : "";
+    const now = new Date();
+
+    if (action === "hide") {
+      message.moderation = {
+        ...(message.moderation || {}),
+        status: "hidden",
+        adminAction: {
+          action,
+          reason: actionReason,
+          admin: req.user._id,
+          actedAt: now
+        }
+      };
+      message.text = "[Message hidden by moderators]";
+      message.attachment = null;
+      message.interviewAttachment = null;
+    }
+
+    if (action === "delete") {
+      message.moderation = {
+        ...(message.moderation || {}),
+        status: "deleted",
+        adminAction: {
+          action,
+          reason: actionReason,
+          admin: req.user._id,
+          actedAt: now
+        }
+      };
+      message.text = "[Message removed]";
+      message.attachment = null;
+      message.interviewAttachment = null;
+      message.reactions = [];
+    }
+
+    if (action === "restore") {
+      message.moderation = {
+        ...(message.moderation || {}),
+        status: "clean",
+        adminAction: {
+          action,
+          reason: actionReason,
+          admin: req.user._id,
+          actedAt: now
+        }
+      };
+    }
+
+    if (action === "clear_flags") {
+      message.moderation = {
+        ...(message.moderation || {}),
+        status: "clean",
+        riskScore: 0,
+        riskLevel: "low",
+        flaggedKeywords: [],
+        matchedPatterns: [],
+        flaggedByAutomation: false,
+        flaggedAt: null,
+        adminAction: {
+          action,
+          reason: actionReason,
+          admin: req.user._id,
+          actedAt: now
+        }
+      };
+    }
+
+    if (action === "restrict_sender_24h" || action === "restrict_sender_72h") {
+      const durationHours = action === "restrict_sender_24h" ? 24 : 72;
+
+      await User.findByIdAndUpdate(message.sender?._id || message.sender, {
+        $set: {
+          "moderation.chatRestrictedUntil": new Date(Date.now() + durationHours * 60 * 60 * 1000),
+          "moderation.chatRestrictionReason": actionReason || "Admin safety restriction"
+        },
+        $inc: {
+          "moderation.abusiveActionCount": 1
+        }
+      });
+
+      message.moderation = {
+        ...(message.moderation || {}),
+        status: "hidden",
+        adminAction: {
+          action,
+          reason: actionReason,
+          admin: req.user._id,
+          actedAt: now
+        }
+      };
+      message.text = "[Message hidden by moderators]";
+      message.attachment = null;
+      message.interviewAttachment = null;
+    }
+
+    await message.save();
+
+    await addAuditLog({
+      adminId: req.user._id,
+      actionType: "moderate_message",
+      targetUser: message.sender?._id || message.sender,
+      targetMessage: message._id,
+      metadata: {
+        action,
+        reason: actionReason
+      }
+    });
+
+    return res.json({
+      data: {
+        id: String(message._id),
+        moderationStatus: message.moderation?.status || "clean",
+        action
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to moderate message" });
+  }
+};
+
 export const getAuditLogs = async (req, res) => {
   try {
     const limit = toPositiveInt(req.query.limit, 30, 100);
@@ -411,6 +979,7 @@ export const getAuditLogs = async (req, res) => {
       .populate("admin", "email adminProfile.name")
       .populate("targetUser", "email userType companyProfile.companyName seekerProfile.name")
       .populate("targetJob", "title")
+      .populate("targetMessage", "text")
       .lean();
 
     return res.json({
@@ -438,6 +1007,12 @@ export const getAuditLogs = async (req, res) => {
           ? {
               id: String(log.targetJob._id),
               title: log.targetJob.title
+            }
+          : null,
+        targetMessage: log.targetMessage
+          ? {
+              id: String(log.targetMessage._id),
+              text: log.targetMessage.text || ""
             }
           : null,
         metadata: log.metadata || {}

@@ -17,6 +17,44 @@ const geoPointSchema = new Schema(
   { _id: false }
 );
 
+const moderationSchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: ["approved", "pending_review", "flagged", "rejected"],
+      default: "approved"
+    },
+    qualityScore: {
+      type: Number,
+      default: 100
+    },
+    flags: {
+      type: [String],
+      default: []
+    },
+    duplicateOf: {
+      type: Schema.Types.ObjectId,
+      ref: "Job",
+      default: null
+    },
+    reviewedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    reviewedAt: {
+      type: Date,
+      default: null
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: ""
+    }
+  },
+  { _id: false }
+);
+
 const jobSchema = new Schema(
   {
     company: {
@@ -63,6 +101,10 @@ const jobSchema = new Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    moderation: {
+      type: moderationSchema,
+      default: () => ({})
     }
   },
   { timestamps: true }

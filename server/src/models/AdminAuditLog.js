@@ -24,6 +24,11 @@ const adminAuditLogSchema = new Schema(
       ref: "Job",
       default: null
     },
+    targetMessage: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+      default: null
+    },
     metadata: {
       type: Schema.Types.Mixed,
       default: {}

@@ -75,6 +75,16 @@ const toLocalDisplay = (value) => {
 const getErrorMessage = (requestError, fallback) =>
   requestError?.response?.data?.message || fallback;
 
+const allowedReportCategories = new Set([
+  "spam",
+  "scam",
+  "harassment",
+  "misleading_job",
+  "hate_or_abuse",
+  "duplicate",
+  "other"
+]);
+
 const SeekerDashboard = () => {
   const { user, setUser } = useAuth();
   const { showToast } = useToast();
@@ -640,6 +650,70 @@ const SeekerDashboard = () => {
     }
   };
 
+  const submitReport = async ({ targetType, targetId, defaultCategory = "other" }) => {
+    if (!targetType || !targetId) {
+      return;
+    }
+
+    const reasonInput = (window.prompt(
+      "Reason category (spam, scam, harassment, misleading_job, hate_or_abuse, duplicate, other)",
+      defaultCategory
+    ) || defaultCategory)
+      .trim()
+      .toLowerCase();
+
+    const reasonCategory = allowedReportCategories.has(reasonInput) ? reasonInput : "other";
+    const details = window.prompt("Add details (optional)", "") || "";
+
+    setError("");
+    setNotice("");
+
+    try {
+      await api.post("/reports", {
+        targetType,
+        targetId,
+        reasonCategory,
+        details
+      });
+
+      setNotice("Report submitted. Our moderation team will review it.");
+      showToast({
+        type: "success",
+        title: "Report submitted",
+        message: "Thank you. We will review this shortly."
+      });
+    } catch (requestError) {
+      const message = getErrorMessage(requestError, "Failed to submit report");
+      setError(message);
+      showToast({ type: "error", title: "Report failed", message });
+    }
+  };
+
+  const handleReportActiveJob = () => {
+    if (!activeJob?._id) {
+      return;
+    }
+
+    submitReport({
+      targetType: "job",
+      targetId: activeJob._id,
+      defaultCategory: "misleading_job"
+    });
+  };
+
+  const handleReportActiveCompany = () => {
+    const companyId = activeJob?.company?._id;
+    if (!companyId) {
+      return;
+    }
+
+    submitReport({
+      targetType: "company",
+      targetId: companyId,
+      defaultCategory: "other"
+    });
+  };
+
   const handleApplySavedJob = async (savedItem) => {
     const jobId = savedItem?.targetJob?._id;
     if (!jobId) {
@@ -829,7 +903,7 @@ const SeekerDashboard = () => {
               >
                 <JobCardContent job={activeJob} />
               </SwipeCard>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Button variant="secondary" disabled={isActionPending} onClick={() => handleSwipe("left")}>
                   Skip
                 </Button>
@@ -838,6 +912,23 @@ const SeekerDashboard = () => {
                 </Button>
                 <Button disabled={isActionPending} onClick={() => handleSwipe("right")}>
                   Apply
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={isActionPending}
+                  onClick={() => {
+                    const reportCompany = window.confirm(
+                      "Report this company instead of the specific job? Choose Cancel to report the job."
+                    );
+
+                    if (reportCompany) {
+                      handleReportActiveCompany();
+                    } else {
+                      handleReportActiveJob();
+                    }
+                  }}
+                >
+                  Report
                 </Button>
               </div>
             </div>
@@ -898,7 +989,7 @@ const SeekerDashboard = () => {
                   {job.salary && <span className="chip normal-case tracking-normal">{job.salary}</span>}
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
                   <Button disabled={isActionPending} onClick={() => handleApplySavedJob(savedItem)}>
                     Apply
                   </Button>
@@ -915,6 +1006,24 @@ const SeekerDashboard = () => {
                     onClick={() => handleRemoveSavedJob(savedItem._id)}
                   >
                     Remove
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={isActionPending}
+                    onClick={() => {
+                      const companyId = job.company?._id;
+                      if (!companyId) {
+                        return;
+                      }
+
+                      submitReport({
+                        targetType: "company",
+                        targetId: companyId,
+                        defaultCategory: "other"
+                      });
+                    }}
+                  >
+                    Report
                   </Button>
                 </div>
               </div>

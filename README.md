@@ -36,6 +36,9 @@ JobHuntr is a swipe-first hiring platform inspired by Tinder-style interactions.
 - Postcode radius and industry filters for seeker discovery
 - Admin moderation dashboard with company verification and job controls
 - Verified company badge for trusted employers in seeker-facing views
+- Reports and appeals workflow (jobs, companies, messages)
+- Message safety automation with scam signal detection and temporary chat restrictions
+- Job quality moderation with pending review and duplicate detection safeguards
 
 ## Tech Stack
 
@@ -188,6 +191,12 @@ Base path: /api
    - GET /notifications
    - PATCH /notifications/:notificationId/read
    - PATCH /notifications/read-all
+- Reports
+   - POST /reports
+   - GET /reports/me
+- Appeals
+   - POST /appeals
+   - POST /appeals/me
 - Admin (admin role only)
    - GET /admin/overview
    - GET /admin/companies
@@ -195,6 +204,13 @@ Base path: /api
    - PATCH /admin/users/:userId/suspension
    - GET /admin/jobs
    - PATCH /admin/jobs/:jobId/status
+   - PATCH /admin/jobs/:jobId/moderation
+   - GET /admin/reports
+   - PATCH /admin/reports/:reportId
+   - GET /admin/appeals
+   - PATCH /admin/appeals/:appealId
+   - GET /admin/messages/flagged
+   - PATCH /admin/messages/:messageId/moderation
    - GET /admin/audit-logs
 
 See API_EXAMPLES.md for request examples.
