@@ -498,7 +498,13 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       {loading && <LoadingSpinner label="Loading messages" />}
 
       {!loading && (
-        <div className="max-h-[420px] space-y-3 overflow-y-auto rounded-2xl bg-slate-950/72 p-3 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.14)]">
+        <div
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label={`Conversation with ${counterpartName}`}
+          className="max-h-[420px] space-y-3 overflow-y-auto rounded-2xl bg-slate-950/72 p-3 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.14)]"
+        >
           {!messages.length && <p className="text-sm text-slate-300">No messages yet.</p>}
 
           {messages.map((message) => {
@@ -606,6 +612,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                       <button
                         key={`${message._id}-${reaction.emoji}`}
                         type="button"
+                        aria-label={`${reaction.emoji} reaction, ${reaction.count} ${reaction.count === 1 ? "time" : "times"}${reaction.mine ? ", selected" : ""}`}
                         className={`rounded-full border px-2 py-0.5 text-xs ${
                           reaction.mine
                             ? "border-transparent bg-brand/30 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.3)]"
@@ -622,6 +629,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
                       <button
                         key={`${message._id}-quick-${emoji}`}
                         type="button"
+                        aria-label={`React with ${emoji}`}
                         className="rounded-full border border-transparent bg-slate-900/70 px-1.5 py-0.5 text-[11px] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:bg-slate-800/80"
                         onClick={() => handleToggleReaction(message._id, emoji)}
                         disabled={reactingMessageId === message._id}
@@ -636,7 +644,9 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
           })}
 
           {isCounterpartTyping && (
-            <p className="text-xs font-medium text-brandStrong">{counterpartName} is typing...</p>
+            <p role="status" aria-live="polite" className="text-xs font-medium text-brandStrong">
+              {counterpartName} is typing...
+            </p>
           )}
 
           <div ref={endRef} />
@@ -644,7 +654,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
       )}
 
       {attachmentFile && (
-        <div className="surface-subtle flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-100">
+        <div role="status" className="surface-subtle flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-100">
           <span className="truncate">
             Attached: {attachmentFile.name} ({formatFileSize(attachmentFile.size)})
           </span>
@@ -658,7 +668,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="flex flex-col gap-2 sm:flex-row">
+      <form onSubmit={handleSendMessage} aria-label="Message composer" className="flex flex-col gap-2 sm:flex-row">
         <input
           ref={fileInputRef}
           type="file"
@@ -672,6 +682,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         </Button>
 
         <input
+          type="text"
           value={draft}
           onChange={handleDraftChange}
           placeholder="Send a message"
@@ -684,7 +695,7 @@ const ChatWindow = ({ selectedMatch, currentUser, headerAction = null }) => {
         </Button>
       </form>
 
-      {error && <p className="status-error">{error}</p>}
+      {error && <p role="alert" className="status-error">{error}</p>}
     </div>
   );
 };

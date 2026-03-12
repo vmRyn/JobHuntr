@@ -134,7 +134,12 @@ const RegisterPage = () => {
               <h1 className="font-display text-3xl text-slate-50 md:text-4xl">Join JobHuntr</h1>
             </div>
 
-            <SegmentedTabs tabs={accountTabs} value={userType} onChange={setUserType} />
+            <SegmentedTabs
+              tabs={accountTabs}
+              value={userType}
+              onChange={setUserType}
+              ariaLabel="Account type"
+            />
 
             <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-2">
               <InputField

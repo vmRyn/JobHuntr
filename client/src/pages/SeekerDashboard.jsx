@@ -29,6 +29,7 @@ import {
   ProfileIcon
 } from "../components/ui/NavIcons";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { getProfileCompletionState } from "../utils/profileCompletion";
 
 const createInitialProfile = (user) => ({
@@ -71,8 +72,12 @@ const toLocalDisplay = (value) => {
   });
 };
 
+const getErrorMessage = (requestError, fallback) =>
+  requestError?.response?.data?.message || fallback;
+
 const SeekerDashboard = () => {
   const { user, setUser } = useAuth();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("discover");
   const [jobs, setJobs] = useState([]);
   const [savedJobs, setSavedJobs] = useState([]);
@@ -90,8 +95,10 @@ const SeekerDashboard = () => {
   const [interviewNotifications, setInterviewNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isActionPending, setIsActionPending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const pendingActionRef = useRef(null);
   const socketRef = useRef(null);
 
   const activeJob = jobs[0] || null;
@@ -185,14 +192,123 @@ const SeekerDashboard = () => {
     setActiveTab(nextTab);
   };
 
+  const clearPendingAction = () => {
+    if (pendingActionRef.current?.timerId) {
+      window.clearTimeout(pendingActionRef.current.timerId);
+    }
+
+    pendingActionRef.current = null;
+    setIsActionPending(false);
+  };
+
+  const runUndoableAction = ({
+    pendingTitle,
+    pendingMessage,
+    successTitle,
+    successMessage,
+    errorMessage,
+    optimisticUpdate,
+    rollbackUpdate,
+    commitRequest,
+    onCommitted
+  }) => {
+    if (pendingActionRef.current) {
+      showToast({
+        type: "info",
+        title: "Action pending",
+        message: "Undo or wait a moment before starting another action."
+      });
+      return;
+    }
+
+    optimisticUpdate();
+
+    const pendingAction = {};
+
+    const undoAction = () => {
+      if (pendingActionRef.current !== pendingAction) {
+        return;
+      }
+
+      window.clearTimeout(pendingAction.timerId);
+      rollbackUpdate();
+      pendingActionRef.current = null;
+      setIsActionPending(false);
+
+      showToast({
+        type: "neutral",
+        title: "Action undone",
+        message: "Your previous action has been reverted."
+      });
+    };
+
+    pendingAction.timerId = window.setTimeout(async () => {
+      if (pendingActionRef.current !== pendingAction) {
+        return;
+      }
+
+      pendingActionRef.current = null;
+      setIsActionPending(false);
+
+      try {
+        const responseData = await commitRequest();
+
+        if (typeof onCommitted === "function") {
+          onCommitted(responseData);
+        }
+
+        if (successTitle || successMessage) {
+          showToast({
+            type: "success",
+            title: successTitle || "Done",
+            message: successMessage || ""
+          });
+        }
+      } catch (requestError) {
+        rollbackUpdate();
+
+        const resolvedError = getErrorMessage(requestError, errorMessage || "Action failed");
+        setError(resolvedError);
+        showToast({
+          type: "error",
+          title: "Action failed",
+          message: resolvedError
+        });
+      }
+    }, 4000);
+
+    pendingActionRef.current = pendingAction;
+    setIsActionPending(true);
+
+    showToast({
+      type: "info",
+      title: pendingTitle,
+      message: pendingMessage || "Undo within 4 seconds.",
+      actionLabel: "Undo",
+      onAction: undoAction,
+      duration: 4100
+    });
+  };
+
   useEffect(() => {
     setProfileForm(createInitialProfile(user));
     setProfileFiles({ profilePicture: null, cv: null });
   }, [user]);
 
+  useEffect(
+    () => () => {
+      clearPendingAction();
+    },
+    []
+  );
+
   useEffect(() => {
     if (profileLocked && activeTab !== "profile") {
       setActiveTab("profile");
+    }
+
+    if (profileLocked && pendingActionRef.current) {
+      clearPendingAction();
     }
   }, [activeTab, profileLocked]);
 
@@ -251,7 +367,7 @@ const SeekerDashboard = () => {
       const { data } = await api.get("/saved");
       setSavedJobs(data.savedJobs || []);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to load saved jobs");
+      setError(getErrorMessage(requestError, "Failed to load saved jobs"));
     } finally {
       setLoadingSavedJobs(false);
     }
@@ -391,20 +507,49 @@ const SeekerDashboard = () => {
   const handleSwipe = async (direction) => {
     if (!activeJob) return;
 
+    const swipedJob = activeJob;
+    const directionLabel = direction === "right" ? "Applied" : "Skipped";
+
     setError("");
     setNotice("");
 
-    try {
-      const { data } = await api.post(`/swipes/job/${activeJob._id}`, { direction });
-      setJobs((prev) => prev.slice(1));
+    runUndoableAction({
+      pendingTitle: `${directionLabel} ${swipedJob.title}`,
+      pendingMessage: "Undo within 4 seconds before this is finalized.",
+      successTitle: direction === "right" ? "Application sent" : "Job skipped",
+      successMessage:
+        direction === "right"
+          ? "Your swipe has been recorded."
+          : "This job has been removed from your queue.",
+      errorMessage: "Failed to submit swipe",
+      optimisticUpdate: () => {
+        setJobs((prev) => prev.filter((job) => job._id !== swipedJob._id));
+      },
+      rollbackUpdate: () => {
+        setJobs((prev) => {
+          if (prev.some((job) => job._id === swipedJob._id)) {
+            return prev;
+          }
 
-      if (data.matched) {
-        setNotice("Match created. Say hello in chat.");
-        loadMatches();
+          return [swipedJob, ...prev];
+        });
+      },
+      commitRequest: async () => {
+        const { data } = await api.post(`/swipes/job/${swipedJob._id}`, { direction });
+        return data;
+      },
+      onCommitted: (data) => {
+        if (data?.matched) {
+          loadMatches();
+          setNotice("Match created. Say hello in chat.");
+          showToast({
+            type: "success",
+            title: "It is a match",
+            message: "Open Messages to start the conversation."
+          });
+        }
       }
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to send swipe");
-    }
+    });
   };
 
   const handleProfileChange = (event) => {
@@ -456,8 +601,15 @@ const SeekerDashboard = () => {
       const { data } = await api.put("/profile/me", formData);
       setUser(data);
       setNotice("Profile updated");
+      showToast({
+        type: "success",
+        title: "Profile updated",
+        message: "Your changes are now live."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to update profile");
+      const message = getErrorMessage(requestError, "Failed to update profile");
+      setError(message);
+      showToast({ type: "error", title: "Profile update failed", message });
     } finally {
       setSavingProfile(false);
     }
@@ -476,8 +628,15 @@ const SeekerDashboard = () => {
       setJobs((prev) => prev.slice(1));
       setNotice("Job saved to your list");
       loadSavedJobs();
+      showToast({
+        type: "success",
+        title: "Job saved",
+        message: "You can review it in the Saved tab."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to save job");
+      const message = getErrorMessage(requestError, "Failed to save job");
+      setError(message);
+      showToast({ type: "error", title: "Save failed", message });
     }
   };
 
@@ -490,19 +649,42 @@ const SeekerDashboard = () => {
     setError("");
     setNotice("");
 
-    try {
-      const { data } = await api.post(`/swipes/job/${jobId}`, { direction: "right" });
-      setSavedJobs((prev) => prev.filter((item) => item._id !== savedItem._id));
+    runUndoableAction({
+      pendingTitle: `Apply to ${savedItem.targetJob?.title || "saved job"}`,
+      pendingMessage: "Undo within 4 seconds before the application is sent.",
+      successTitle: "Applied from saved",
+      successMessage: "The job has been moved out of your saved list.",
+      errorMessage: "Failed to apply from saved jobs",
+      optimisticUpdate: () => {
+        setSavedJobs((prev) => prev.filter((item) => item._id !== savedItem._id));
+      },
+      rollbackUpdate: () => {
+        setSavedJobs((prev) => {
+          if (prev.some((item) => item._id === savedItem._id)) {
+            return prev;
+          }
 
-      if (data.matched) {
-        setNotice("Match created. Say hello in chat.");
-        loadMatches();
-      } else {
-        setNotice("Applied from saved jobs");
+          return [savedItem, ...prev];
+        });
+      },
+      commitRequest: async () => {
+        const { data } = await api.post(`/swipes/job/${jobId}`, { direction: "right" });
+        return data;
+      },
+      onCommitted: (data) => {
+        if (data?.matched) {
+          loadMatches();
+          setNotice("Match created. Say hello in chat.");
+          showToast({
+            type: "success",
+            title: "It is a match",
+            message: "Open Messages to start the conversation."
+          });
+        } else {
+          setNotice("Applied from saved jobs");
+        }
       }
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to apply from saved jobs");
-    }
+    });
   };
 
   const handleRemoveSavedJob = async (savedItemId) => {
@@ -517,8 +699,15 @@ const SeekerDashboard = () => {
       await api.delete(`/saved/${savedItemId}`);
       setSavedJobs((prev) => prev.filter((item) => item._id !== savedItemId));
       setNotice("Removed from saved jobs");
+      showToast({
+        type: "neutral",
+        title: "Removed",
+        message: "Job removed from your saved list."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to remove saved job");
+      const message = getErrorMessage(requestError, "Failed to remove saved job");
+      setError(message);
+      showToast({ type: "error", title: "Remove failed", message });
     }
   };
 
@@ -632,17 +821,24 @@ const SeekerDashboard = () => {
 
           {!loadingJobs && activeJob && (
             <div className="flex flex-1 flex-col gap-3">
-              <SwipeCard itemKey={activeJob._id} onSwipe={handleSwipe} className={`h-full ${swipeCardHeightClass}`}>
+              <SwipeCard
+                itemKey={activeJob._id}
+                onSwipe={handleSwipe}
+                disabled={isActionPending}
+                className={`h-full ${swipeCardHeightClass}`}
+              >
                 <JobCardContent job={activeJob} />
               </SwipeCard>
               <div className="grid grid-cols-3 gap-2">
-                <Button variant="secondary" onClick={() => handleSwipe("left")}>
+                <Button variant="secondary" disabled={isActionPending} onClick={() => handleSwipe("left")}>
                   Skip
                 </Button>
-                <Button variant="ghost" onClick={handleSaveJob}>
+                <Button variant="ghost" disabled={isActionPending} onClick={handleSaveJob}>
                   Save
                 </Button>
-                <Button onClick={() => handleSwipe("right")}>Apply</Button>
+                <Button disabled={isActionPending} onClick={() => handleSwipe("right")}>
+                  Apply
+                </Button>
               </div>
             </div>
           )}
@@ -699,11 +895,21 @@ const SeekerDashboard = () => {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Button onClick={() => handleApplySavedJob(savedItem)}>Apply</Button>
-                  <Button variant="secondary" onClick={() => setSavedJobDetails(job)}>
+                  <Button disabled={isActionPending} onClick={() => handleApplySavedJob(savedItem)}>
+                    Apply
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={isActionPending}
+                    onClick={() => setSavedJobDetails(job)}
+                  >
                     View details
                   </Button>
-                  <Button variant="ghost" onClick={() => handleRemoveSavedJob(savedItem._id)}>
+                  <Button
+                    variant="ghost"
+                    disabled={isActionPending}
+                    onClick={() => handleRemoveSavedJob(savedItem._id)}
+                  >
                     Remove
                   </Button>
                 </div>

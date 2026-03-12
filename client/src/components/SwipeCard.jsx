@@ -9,10 +9,10 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", childre
   const likeOpacity = useTransform(x, [24, 140], [0, 1]);
   const passOpacity = useTransform(x, [-140, -24], [1, 0]);
 
-  const handleDragEnd = async (_, info) => {
+  const triggerSwipe = async (direction) => {
     if (disabled) return;
 
-    if (info.offset.x > SWIPE_THRESHOLD) {
+    if (direction === "right") {
       await controls.start({
         x: 640,
         rotate: 12,
@@ -24,7 +24,7 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", childre
       return;
     }
 
-    if (info.offset.x < -SWIPE_THRESHOLD) {
+    if (direction === "left") {
       await controls.start({
         x: -640,
         rotate: -12,
@@ -33,6 +33,19 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", childre
       });
       x.set(0);
       onSwipe("left");
+    }
+  };
+
+  const handleDragEnd = async (_, info) => {
+    if (disabled) return;
+
+    if (info.offset.x > SWIPE_THRESHOLD) {
+      await triggerSwipe("right");
+      return;
+    }
+
+    if (info.offset.x < -SWIPE_THRESHOLD) {
+      await triggerSwipe("left");
       return;
     }
 
@@ -41,6 +54,21 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", childre
       rotate: 0,
       transition: { type: "spring", stiffness: 260, damping: 20 }
     });
+  };
+
+  const handleKeyDown = (event) => {
+    if (disabled) return;
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      triggerSwipe("left");
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      triggerSwipe("right");
+    }
   };
 
   return (
@@ -53,6 +81,11 @@ const SwipeCard = ({ itemKey, onSwipe, disabled = false, className = "", childre
       animate={controls}
       style={{ x, rotate }}
       whileDrag={{ scale: 1.02, cursor: "grabbing" }}
+      tabIndex={disabled ? -1 : 0}
+      onKeyDown={handleKeyDown}
+      aria-disabled={disabled}
+      aria-roledescription="Swipeable card"
+      aria-label="Swipe card. Press left arrow to skip or right arrow to match."
       className={`surface-card relative touch-pan-y overflow-hidden border-white/14 p-5 md:p-6 ${className}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brandHot/16 via-transparent to-brandStrong/12" />

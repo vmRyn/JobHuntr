@@ -27,7 +27,7 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
   }
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5" aria-label="Matches">
       {matches.map((match) => {
         const selected = selectedMatchId === match._id;
         const counterpartName = getCounterpartName(match, userType);
@@ -37,6 +37,7 @@ const MatchList = ({ matches, selectedMatchId, onSelect, userType }) => {
           <button
             key={match._id}
             type="button"
+            aria-label={`${counterpartName}${selected ? ", selected" : ""}`}
             onClick={() => onSelect(match)}
             className={`w-full rounded-2xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-brandStrong/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
               selected

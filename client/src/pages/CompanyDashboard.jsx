@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import CandidateProfileSheet from "../components/CandidateProfileSheet";
@@ -26,7 +26,11 @@ import {
   ProfileIcon
 } from "../components/ui/NavIcons";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { getProfileCompletionState } from "../utils/profileCompletion";
+
+const getErrorMessage = (requestError, fallback) =>
+  requestError?.response?.data?.message || fallback;
 
 const defaultJobForm = {
   id: "",
@@ -48,6 +52,7 @@ const createInitialProfile = (user) => ({
 
 const CompanyDashboard = () => {
   const { user, setUser } = useAuth();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("discover");
   const [jobs, setJobs] = useState([]);
   const [savedCandidates, setSavedCandidates] = useState([]);
@@ -65,8 +70,10 @@ const CompanyDashboard = () => {
   const [profileFiles, setProfileFiles] = useState({ logo: null });
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [loadingSavedCandidates, setLoadingSavedCandidates] = useState(false);
+  const [isActionPending, setIsActionPending] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const pendingActionRef = useRef(null);
 
   const profileCompletion = useMemo(() => getProfileCompletionState(user), [user]);
   const profileLocked = !profileCompletion.profileCompleted;
@@ -112,14 +119,123 @@ const CompanyDashboard = () => {
     setActiveTab(nextTab);
   };
 
+  const clearPendingAction = () => {
+    if (pendingActionRef.current?.timerId) {
+      window.clearTimeout(pendingActionRef.current.timerId);
+    }
+
+    pendingActionRef.current = null;
+    setIsActionPending(false);
+  };
+
+  const runUndoableAction = ({
+    pendingTitle,
+    pendingMessage,
+    successTitle,
+    successMessage,
+    errorMessage,
+    optimisticUpdate,
+    rollbackUpdate,
+    commitRequest,
+    onCommitted
+  }) => {
+    if (pendingActionRef.current) {
+      showToast({
+        type: "info",
+        title: "Action pending",
+        message: "Undo or wait a moment before starting another action."
+      });
+      return;
+    }
+
+    optimisticUpdate();
+
+    const pendingAction = {};
+
+    const undoAction = () => {
+      if (pendingActionRef.current !== pendingAction) {
+        return;
+      }
+
+      window.clearTimeout(pendingAction.timerId);
+      rollbackUpdate();
+      pendingActionRef.current = null;
+      setIsActionPending(false);
+
+      showToast({
+        type: "neutral",
+        title: "Action undone",
+        message: "Your previous action has been reverted."
+      });
+    };
+
+    pendingAction.timerId = window.setTimeout(async () => {
+      if (pendingActionRef.current !== pendingAction) {
+        return;
+      }
+
+      pendingActionRef.current = null;
+      setIsActionPending(false);
+
+      try {
+        const responseData = await commitRequest();
+
+        if (typeof onCommitted === "function") {
+          onCommitted(responseData);
+        }
+
+        if (successTitle || successMessage) {
+          showToast({
+            type: "success",
+            title: successTitle || "Done",
+            message: successMessage || ""
+          });
+        }
+      } catch (requestError) {
+        rollbackUpdate();
+
+        const resolvedError = getErrorMessage(requestError, errorMessage || "Action failed");
+        setError(resolvedError);
+        showToast({
+          type: "error",
+          title: "Action failed",
+          message: resolvedError
+        });
+      }
+    }, 4000);
+
+    pendingActionRef.current = pendingAction;
+    setIsActionPending(true);
+
+    showToast({
+      type: "info",
+      title: pendingTitle,
+      message: pendingMessage || "Undo within 4 seconds.",
+      actionLabel: "Undo",
+      onAction: undoAction,
+      duration: 4100
+    });
+  };
+
   useEffect(() => {
     setProfileForm(createInitialProfile(user));
     setProfileFiles({ logo: null });
   }, [user]);
 
+  useEffect(
+    () => () => {
+      clearPendingAction();
+    },
+    []
+  );
+
   useEffect(() => {
     if (profileLocked && activeTab !== "profile") {
       setActiveTab("profile");
+    }
+
+    if (profileLocked && pendingActionRef.current) {
+      clearPendingAction();
     }
   }, [activeTab, profileLocked]);
 
@@ -180,7 +296,7 @@ const CompanyDashboard = () => {
       const { data } = await api.get("/saved");
       setSavedCandidates(data.savedCandidates || []);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to load saved candidates");
+      setError(getErrorMessage(requestError, "Failed to load saved candidates"));
     } finally {
       setLoadingSavedCandidates(false);
     }
@@ -245,9 +361,11 @@ const CompanyDashboard = () => {
       if (jobForm.id) {
         await api.put(`/jobs/${jobForm.id}`, payload);
         setNotice("Job updated");
+        showToast({ type: "success", title: "Job updated" });
       } else {
         await api.post("/jobs", payload);
         setNotice("Job created");
+        showToast({ type: "success", title: "Job created" });
       }
 
       resetForm();
@@ -255,7 +373,9 @@ const CompanyDashboard = () => {
       await loadCandidates(selectedJobId);
       setJobModalOpen(false);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to save job");
+      const message = getErrorMessage(requestError, "Failed to save job");
+      setError(message);
+      showToast({ type: "error", title: "Job save failed", message });
     }
   };
 
@@ -284,10 +404,13 @@ const CompanyDashboard = () => {
     try {
       await api.delete(`/jobs/${jobId}`);
       setNotice("Job deleted");
+      showToast({ type: "neutral", title: "Job deleted" });
 
       await loadJobs();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to delete job");
+      const message = getErrorMessage(requestError, "Failed to delete job");
+      setError(message);
+      showToast({ type: "error", title: "Delete failed", message });
     }
   };
 
@@ -298,21 +421,51 @@ const CompanyDashboard = () => {
     setError("");
     setNotice("");
 
-    try {
-      const { data } = await api.post(`/swipes/candidate/${candidate._id}`, {
-        direction,
-        jobId: selectedJobId
-      });
+    const swipedCandidate = candidate;
+    const activeJobId = selectedJobId;
+    const actionLabel = direction === "right" ? "Matched" : "Skipped";
 
-      setCandidates((prev) => prev.slice(1));
+    runUndoableAction({
+      pendingTitle: `${actionLabel} ${swipedCandidate.seekerProfile?.name || "candidate"}`,
+      pendingMessage: "Undo within 4 seconds before this is finalized.",
+      successTitle: direction === "right" ? "Candidate matched" : "Candidate skipped",
+      successMessage:
+        direction === "right"
+          ? "Your swipe has been recorded."
+          : "Candidate removed from your queue.",
+      errorMessage: "Failed to submit swipe",
+      optimisticUpdate: () => {
+        setCandidates((prev) => prev.filter((item) => item._id !== swipedCandidate._id));
+      },
+      rollbackUpdate: () => {
+        setCandidates((prev) => {
+          if (prev.some((item) => item._id === swipedCandidate._id)) {
+            return prev;
+          }
 
-      if (data.matched) {
-        setNotice("Match created. Open chat on the right.");
-        loadMatches();
+          return [swipedCandidate, ...prev];
+        });
+      },
+      commitRequest: async () => {
+        const { data } = await api.post(`/swipes/candidate/${swipedCandidate._id}`, {
+          direction,
+          jobId: activeJobId
+        });
+
+        return data;
+      },
+      onCommitted: (data) => {
+        if (data?.matched) {
+          setNotice("Match created. Open chat on the right.");
+          loadMatches();
+          showToast({
+            type: "success",
+            title: "It is a match",
+            message: "Open Messages to start the conversation."
+          });
+        }
       }
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to submit swipe");
-    }
+    });
   };
 
   const handleSaveCandidate = async () => {
@@ -329,8 +482,15 @@ const CompanyDashboard = () => {
       setCandidates((prev) => prev.slice(1));
       setNotice("Candidate saved to your list");
       loadSavedCandidates();
+      showToast({
+        type: "success",
+        title: "Candidate saved",
+        message: "You can review them in the Saved tab."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to save candidate");
+      const message = getErrorMessage(requestError, "Failed to save candidate");
+      setError(message);
+      showToast({ type: "error", title: "Save failed", message });
     }
   };
 
@@ -345,23 +505,46 @@ const CompanyDashboard = () => {
     setError("");
     setNotice("");
 
-    try {
-      const { data } = await api.post(`/swipes/candidate/${candidateId}`, {
-        direction: "right",
-        jobId
-      });
+    runUndoableAction({
+      pendingTitle: `Match ${savedItem.targetUser?.seekerProfile?.name || "candidate"}`,
+      pendingMessage: "Undo within 4 seconds before the match action is sent.",
+      successTitle: "Matched from saved",
+      successMessage: "Candidate moved out of your saved list.",
+      errorMessage: "Failed to match saved candidate",
+      optimisticUpdate: () => {
+        setSavedCandidates((prev) => prev.filter((item) => item._id !== savedItem._id));
+      },
+      rollbackUpdate: () => {
+        setSavedCandidates((prev) => {
+          if (prev.some((item) => item._id === savedItem._id)) {
+            return prev;
+          }
 
-      setSavedCandidates((prev) => prev.filter((item) => item._id !== savedItem._id));
+          return [savedItem, ...prev];
+        });
+      },
+      commitRequest: async () => {
+        const { data } = await api.post(`/swipes/candidate/${candidateId}`, {
+          direction: "right",
+          jobId
+        });
 
-      if (data.matched) {
-        setNotice("Match created. Open chat on the right.");
-        loadMatches();
-      } else {
-        setNotice("Candidate matched from saved list");
+        return data;
+      },
+      onCommitted: (data) => {
+        if (data?.matched) {
+          setNotice("Match created. Open chat on the right.");
+          loadMatches();
+          showToast({
+            type: "success",
+            title: "It is a match",
+            message: "Open Messages to start the conversation."
+          });
+        } else {
+          setNotice("Candidate matched from saved list");
+        }
       }
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to match saved candidate");
-    }
+    });
   };
 
   const handleRemoveSavedCandidate = async (savedItemId) => {
@@ -376,8 +559,15 @@ const CompanyDashboard = () => {
       await api.delete(`/saved/${savedItemId}`);
       setSavedCandidates((prev) => prev.filter((item) => item._id !== savedItemId));
       setNotice("Removed from saved candidates");
+      showToast({
+        type: "neutral",
+        title: "Removed",
+        message: "Candidate removed from your saved list."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to remove saved candidate");
+      const message = getErrorMessage(requestError, "Failed to remove saved candidate");
+      setError(message);
+      showToast({ type: "error", title: "Remove failed", message });
     }
   };
 
@@ -433,8 +623,15 @@ const CompanyDashboard = () => {
       const { data } = await api.put("/profile/me", formData);
       setUser(data);
       setNotice("Profile updated");
+      showToast({
+        type: "success",
+        title: "Profile updated",
+        message: "Your changes are now live."
+      });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to update profile");
+      const message = getErrorMessage(requestError, "Failed to update profile");
+      setError(message);
+      showToast({ type: "error", title: "Profile update failed", message });
     } finally {
       setSavingProfile(false);
     }
@@ -490,17 +687,27 @@ const CompanyDashboard = () => {
 
           {!loadingCandidates && activeCandidate && (
             <>
-              <SwipeCard itemKey={activeCandidate._id} onSwipe={handleCandidateSwipe}>
+              <SwipeCard
+                itemKey={activeCandidate._id}
+                onSwipe={handleCandidateSwipe}
+                disabled={isActionPending}
+              >
                 <CandidateCardContent candidate={activeCandidate} />
               </SwipeCard>
               <div className="grid grid-cols-3 gap-2">
-                <Button variant="secondary" onClick={() => handleCandidateSwipe("left")}>
+                <Button
+                  variant="secondary"
+                  disabled={isActionPending}
+                  onClick={() => handleCandidateSwipe("left")}
+                >
                   Skip
                 </Button>
-                <Button variant="ghost" onClick={handleSaveCandidate}>
+                <Button variant="ghost" disabled={isActionPending} onClick={handleSaveCandidate}>
                   Save
                 </Button>
-                <Button onClick={() => handleCandidateSwipe("right")}>Match</Button>
+                <Button disabled={isActionPending} onClick={() => handleCandidateSwipe("right")}>
+                  Match
+                </Button>
               </div>
             </>
           )}
@@ -571,9 +778,12 @@ const CompanyDashboard = () => {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Button onClick={() => handleMatchSavedCandidate(savedItem)}>Match</Button>
+                  <Button disabled={isActionPending} onClick={() => handleMatchSavedCandidate(savedItem)}>
+                    Match
+                  </Button>
                   <Button
                     variant="secondary"
+                    disabled={isActionPending}
                     onClick={() =>
                       setCandidateDetails({
                         candidate,
@@ -583,7 +793,11 @@ const CompanyDashboard = () => {
                   >
                     View details
                   </Button>
-                  <Button variant="ghost" onClick={() => handleRemoveSavedCandidate(savedItem._id)}>
+                  <Button
+                    variant="ghost"
+                    disabled={isActionPending}
+                    onClick={() => handleRemoveSavedCandidate(savedItem._id)}
+                  >
                     Remove
                   </Button>
                 </div>

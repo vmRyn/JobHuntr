@@ -1,7 +1,10 @@
 import { motion } from "framer-motion";
 
 const BottomNav = ({ items, activeTab, onChange }) => (
-  <nav className="fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-4">
+  <nav
+    aria-label="Primary dashboard navigation"
+    className="fixed inset-x-0 bottom-3 z-30 flex justify-center px-3 md:bottom-4"
+  >
     <div className="mx-auto flex w-full max-w-2xl items-center justify-between rounded-[1.45rem] border border-transparent bg-slate-950/82 p-2 shadow-soft backdrop-blur-2xl ring-1 ring-brandStrong/20">
       {items.map((item) => {
         const active = activeTab === item.id;
@@ -17,6 +20,9 @@ const BottomNav = ({ items, activeTab, onChange }) => (
               }
             }}
             disabled={disabled}
+            aria-current={active ? "page" : undefined}
+            aria-disabled={disabled}
+            aria-label={`${item.label}${item.badge > 0 ? `, ${item.badge} new items` : ""}`}
             className={`relative flex min-w-[62px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
               active
                 ? "text-slate-50"
@@ -25,10 +31,13 @@ const BottomNav = ({ items, activeTab, onChange }) => (
                   : "text-slate-400 hover:text-slate-100"
             }`}
           >
-            <span className="relative text-base leading-none">
+            <span className="relative text-base leading-none" aria-hidden="true">
               {item.icon}
               {item.badge > 0 && (
-                <span className="absolute -right-3 -top-2 inline-flex min-w-5 items-center justify-center rounded-full bg-negative px-1 text-[10px] font-bold leading-4 text-white">
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-3 -top-2 inline-flex min-w-5 items-center justify-center rounded-full bg-negative px-1 text-[10px] font-bold leading-4 text-white"
+                >
                   {item.badge > 99 ? "99+" : item.badge}
                 </span>
               )}
