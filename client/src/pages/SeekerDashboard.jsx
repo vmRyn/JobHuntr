@@ -85,6 +85,16 @@ const allowedReportCategories = new Set([
   "other"
 ]);
 
+const reportCategoryOptions = [
+  { value: "misleading_job", label: "Misleading or inaccurate details" },
+  { value: "duplicate", label: "Duplicate posting" },
+  { value: "scam", label: "Scam or fraud" },
+  { value: "spam", label: "Spam" },
+  { value: "harassment", label: "Harassment" },
+  { value: "hate_or_abuse", label: "Hate or abusive content" },
+  { value: "other", label: "Other" }
+];
+
 const SeekerDashboard = () => {
   const { user, setUser } = useAuth();
   const { showToast } = useToast();
@@ -106,6 +116,15 @@ const SeekerDashboard = () => {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [submittingJobReport, setSubmittingJobReport] = useState(false);
+  const [jobReportModal, setJobReportModal] = useState({
+    open: false,
+    jobId: "",
+    jobTitle: "",
+    companyName: "",
+    reasonCategory: "misleading_job",
+    details: ""
+  });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const pendingActionRef = useRef(null);
@@ -650,20 +669,59 @@ const SeekerDashboard = () => {
     }
   };
 
-  const submitReport = async ({ targetType, targetId, defaultCategory = "other" }) => {
-    if (!targetType || !targetId) {
+  const openJobReportModal = (job) => {
+    if (!job?._id) {
       return;
     }
 
-    const reasonInput = (window.prompt(
-      "Reason category (spam, scam, harassment, misleading_job, hate_or_abuse, duplicate, other)",
-      defaultCategory
-    ) || defaultCategory)
+    setJobReportModal({
+      open: true,
+      jobId: job._id,
+      jobTitle: job.title || "Job",
+      companyName: job.company?.companyProfile?.companyName || "",
+      reasonCategory: "misleading_job",
+      details: ""
+    });
+  };
+
+  const closeJobReportModal = () => {
+    if (submittingJobReport) {
+      return;
+    }
+
+    setJobReportModal((prev) => ({
+      ...prev,
+      open: false
+    }));
+  };
+
+  const handleJobReportFormChange = (event) => {
+    const { name, value } = event.target;
+    setJobReportModal((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const submitReport = async ({
+    targetType,
+    targetId,
+    defaultCategory = "other",
+    reasonCategory,
+    details
+  }) => {
+    if (!targetType || !targetId) {
+      return false;
+    }
+
+    const reasonInput = (reasonCategory ||
+      window.prompt(
+        "Reason category (spam, scam, harassment, misleading_job, hate_or_abuse, duplicate, other)",
+        defaultCategory
+      ) ||
+      defaultCategory)
       .trim()
       .toLowerCase();
 
-    const reasonCategory = allowedReportCategories.has(reasonInput) ? reasonInput : "other";
-    const details = window.prompt("Add details (optional)", "") || "";
+    const resolvedReasonCategory = allowedReportCategories.has(reasonInput) ? reasonInput : "other";
+    const resolvedDetails = typeof details === "string" ? details : window.prompt("Add details (optional)", "") || "";
 
     setError("");
     setNotice("");
@@ -672,8 +730,8 @@ const SeekerDashboard = () => {
       await api.post("/reports", {
         targetType,
         targetId,
-        reasonCategory,
-        details
+        reasonCategory: resolvedReasonCategory,
+        details: resolvedDetails.trim()
       });
 
       setNotice("Report submitted. Our moderation team will review it.");
@@ -682,36 +740,45 @@ const SeekerDashboard = () => {
         title: "Report submitted",
         message: "Thank you. We will review this shortly."
       });
+
+      return true;
     } catch (requestError) {
       const message = getErrorMessage(requestError, "Failed to submit report");
       setError(message);
       showToast({ type: "error", title: "Report failed", message });
+      return false;
+    }
+  };
+
+  const handleSubmitJobReport = async (event) => {
+    event.preventDefault();
+
+    if (!jobReportModal.jobId) {
+      return;
+    }
+
+    setSubmittingJobReport(true);
+
+    const wasSuccessful = await submitReport({
+      targetType: "job",
+      targetId: jobReportModal.jobId,
+      reasonCategory: jobReportModal.reasonCategory,
+      details: jobReportModal.details
+    });
+
+    setSubmittingJobReport(false);
+
+    if (wasSuccessful) {
+      setJobReportModal((prev) => ({
+        ...prev,
+        open: false,
+        details: ""
+      }));
     }
   };
 
   const handleReportActiveJob = () => {
-    if (!activeJob?._id) {
-      return;
-    }
-
-    submitReport({
-      targetType: "job",
-      targetId: activeJob._id,
-      defaultCategory: "misleading_job"
-    });
-  };
-
-  const handleReportActiveCompany = () => {
-    const companyId = activeJob?.company?._id;
-    if (!companyId) {
-      return;
-    }
-
-    submitReport({
-      targetType: "company",
-      targetId: companyId,
-      defaultCategory: "other"
-    });
+    openJobReportModal(activeJob);
   };
 
   const handleApplySavedJob = async (savedItem) => {
@@ -916,17 +983,7 @@ const SeekerDashboard = () => {
                 <Button
                   variant="danger"
                   disabled={isActionPending}
-                  onClick={() => {
-                    const reportCompany = window.confirm(
-                      "Report this company instead of the specific job? Choose Cancel to report the job."
-                    );
-
-                    if (reportCompany) {
-                      handleReportActiveCompany();
-                    } else {
-                      handleReportActiveJob();
-                    }
-                  }}
+                  onClick={handleReportActiveJob}
                 >
                   Report
                 </Button>
@@ -1010,18 +1067,7 @@ const SeekerDashboard = () => {
                   <Button
                     variant="danger"
                     disabled={isActionPending}
-                    onClick={() => {
-                      const companyId = job.company?._id;
-                      if (!companyId) {
-                        return;
-                      }
-
-                      submitReport({
-                        targetType: "company",
-                        targetId: companyId,
-                        defaultCategory: "other"
-                      });
-                    }}
+                    onClick={() => openJobReportModal(job)}
                   >
                     Report
                   </Button>
@@ -1264,17 +1310,61 @@ const SeekerDashboard = () => {
   };
 
   return (
-    <DashboardShell
-      title="Seeker Mode"
-      subtitle="Swipe through roles, save what stands out, and jump straight into matched conversations."
-      tabs={tabs}
-      activeTab={resolvedActiveTab}
-      onTabChange={handleTabChange}
-      notice={profileLocked ? "" : notice}
-      error={profileLocked ? profileLockMessage : error}
-    >
-      {contentByTab[resolvedActiveTab]}
-    </DashboardShell>
+    <>
+      <DashboardShell
+        title="Seeker Mode"
+        subtitle="Swipe through roles, save what stands out, and jump straight into matched conversations."
+        tabs={tabs}
+        activeTab={resolvedActiveTab}
+        onTabChange={handleTabChange}
+        notice={profileLocked ? "" : notice}
+        error={profileLocked ? profileLockMessage : error}
+      >
+        {contentByTab[resolvedActiveTab]}
+      </DashboardShell>
+
+      <ModalSheet
+        open={jobReportModal.open}
+        title={`Report ${jobReportModal.jobTitle || "job"}`}
+        subtitle={jobReportModal.companyName ? `${jobReportModal.companyName} job listing` : "Help us review this listing quickly."}
+        onClose={closeJobReportModal}
+      >
+        <form onSubmit={handleSubmitJobReport} className="space-y-4">
+          <SelectField
+            label="Reason"
+            name="reasonCategory"
+            value={jobReportModal.reasonCategory}
+            onChange={handleJobReportFormChange}
+            options={reportCategoryOptions}
+            required
+          />
+
+          <InputField
+            as="textarea"
+            label="Details (optional)"
+            name="details"
+            value={jobReportModal.details}
+            onChange={handleJobReportFormChange}
+            placeholder="Share anything that helps moderators review this report."
+            rows={5}
+          />
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeJobReportModal}
+              disabled={submittingJobReport}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" disabled={submittingJobReport}>
+              {submittingJobReport ? "Submitting..." : "Submit report"}
+            </Button>
+          </div>
+        </form>
+      </ModalSheet>
+    </>
   );
 };
 
