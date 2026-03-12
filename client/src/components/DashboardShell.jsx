@@ -18,7 +18,6 @@ const getUserLabel = (user) => {
 const DashboardShell = ({ title, subtitle, tabs, activeTab, onTabChange, children, notice, error }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label || "Dashboard section";
 
   const handleLogout = () => {
     logout();
@@ -44,38 +43,6 @@ const DashboardShell = ({ title, subtitle, tabs, activeTab, onTabChange, childre
             </Button>
           </div>
         </div>
-
-        <div className="soft-divider mt-4 pt-4">
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Dashboard sections">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                id={`dashboard-tab-trigger-${tab.id}`}
-                onClick={() => {
-                  if (!tab.disabled) {
-                    onTabChange(tab.id);
-                  }
-                }}
-                disabled={Boolean(tab.disabled)}
-                aria-selected={activeTab === tab.id}
-                aria-controls={`dashboard-tab-${tab.id}`}
-                aria-disabled={Boolean(tab.disabled)}
-                tabIndex={activeTab === tab.id ? 0 : -1}
-                className={`hidden rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition md:inline-flex ${
-                  activeTab === tab.id
-                    ? "border-brandStrong/55 bg-gradient-to-r from-brandHot/20 via-brand/18 to-brandStrong/20 text-slate-50"
-                    : tab.disabled
-                      ? "cursor-not-allowed border-transparent bg-slate-900/40 text-slate-500"
-                      : "border-transparent bg-slate-900/65 text-slate-300 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:text-slate-100"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </header>
 
       {(notice || error) && (
@@ -88,9 +55,6 @@ const DashboardShell = ({ title, subtitle, tabs, activeTab, onTabChange, childre
       <AnimatePresence mode="wait">
         <motion.section
           key={activeTab}
-          id={`dashboard-tab-${activeTab}`}
-          role="tabpanel"
-          aria-label={activeTabLabel}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
