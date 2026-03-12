@@ -4,7 +4,6 @@ import { io } from "socket.io-client";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import ChatWindow from "../components/ChatWindow";
-import InterviewScheduler from "../components/InterviewScheduler";
 import JobCardContent from "../components/JobCardContent";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MatchList from "../components/MatchList";
@@ -1029,13 +1028,6 @@ const SeekerDashboard = () => {
           userType={user.userType}
         />
       </Card>
-
-      <InterviewScheduler
-        selectedMatch={selectedMatch}
-        onNotice={setNotice}
-        onError={setError}
-        canSchedule={false}
-      />
     </div>
   );
 
