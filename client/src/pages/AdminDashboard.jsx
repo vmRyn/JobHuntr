@@ -5,6 +5,7 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import InputField from "../components/ui/InputField";
+import ModalSheet from "../components/ui/ModalSheet";
 import SelectField from "../components/ui/SelectField";
 import VerifiedBadge from "../components/ui/VerifiedBadge";
 import {
@@ -122,6 +123,12 @@ const AdminDashboard = () => {
   const [overview, setOverview] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [companyJobsViewer, setCompanyJobsViewer] = useState({
+    open: false,
+    company: null,
+    jobs: [],
+    loading: false
+  });
   const [reports, setReports] = useState([]);
   const [appeals, setAppeals] = useState([]);
   const [flaggedMessages, setFlaggedMessages] = useState([]);
@@ -436,6 +443,53 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleOpenCompanyJobs = async (company) => {
+    if (!company?.id) {
+      return;
+    }
+
+    setCompanyJobsViewer({
+      open: true,
+      company,
+      jobs: [],
+      loading: true
+    });
+
+    try {
+      const { data } = await api.get("/admin/jobs", {
+        params: {
+          companyId: company.id,
+          status: "all",
+          limit: 100
+        }
+      });
+
+      setCompanyJobsViewer((prev) => ({
+        ...prev,
+        jobs: data.data || [],
+        loading: false
+      }));
+    } catch (requestError) {
+      const message = requestError.response?.data?.message || "Failed to load company jobs";
+      setError(message);
+      showToast({ type: "error", title: "Could not load jobs", message });
+
+      setCompanyJobsViewer((prev) => ({
+        ...prev,
+        loading: false
+      }));
+    }
+  };
+
+  const handleCloseCompanyJobs = () => {
+    setCompanyJobsViewer({
+      open: false,
+      company: null,
+      jobs: [],
+      loading: false
+    });
+  };
+
   const handleSetJobModeration = async (job, moderationStatus) => {
     if (!job?.id) return;
 
@@ -707,6 +761,14 @@ const AdminDashboard = () => {
                     disabled={activeActionId === `suspend-${company.id}`}
                   >
                     {company.isSuspended ? "Unsuspend" : "Suspend"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="sm:col-span-2"
+                    onClick={() => handleOpenCompanyJobs(company)}
+                  >
+                    View jobs
                   </Button>
                 </div>
               </div>
@@ -1176,17 +1238,79 @@ const AdminDashboard = () => {
   };
 
   return (
-    <DashboardShell
-      title="Admin Control Center"
-      subtitle="Moderate trust, review risk queues, and keep hiring interactions safe."
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      notice={notice}
-      error={error}
-    >
-      {contentByTab[activeTab] || contentByTab.overview}
-    </DashboardShell>
+    <>
+      <DashboardShell
+        title="Admin Control Center"
+        subtitle="Moderate trust, review risk queues, and keep hiring interactions safe."
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        notice={notice}
+        error={error}
+      >
+        {contentByTab[activeTab] || contentByTab.overview}
+      </DashboardShell>
+
+      <ModalSheet
+        open={companyJobsViewer.open}
+        title={`${companyJobsViewer.company?.companyName || "Company"} jobs`}
+        subtitle={
+          companyJobsViewer.loading
+            ? "Loading jobs"
+            : `${companyJobsViewer.jobs.length} jobs found`
+        }
+        onClose={handleCloseCompanyJobs}
+      >
+        <div className="space-y-3">
+          {companyJobsViewer.loading && <LoadingSpinner label="Loading company jobs" />}
+
+          {!companyJobsViewer.loading && !companyJobsViewer.jobs.length && (
+            <div className="empty-state">No jobs found for this company.</div>
+          )}
+
+          {!companyJobsViewer.loading && companyJobsViewer.jobs.length > 0 && (
+            <div className="space-y-2.5">
+              {companyJobsViewer.jobs.map((job) => (
+                <div key={job.id} className="surface-subtle p-4">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-base font-semibold text-slate-100">{job.title}</p>
+                      <span className={moderationChipClass(job.moderationStatus)}>
+                        {(job.moderationStatus || "approved").replace("_", " ").toUpperCase()}
+                      </span>
+                      {job.isActive ? (
+                        <span className="chip chip-accent">ACTIVE</span>
+                      ) : (
+                        <span className="chip bg-slate-700/75 text-slate-200">INACTIVE</span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                      {job.location && <span>{job.location}</span>}
+                      {job.industry && <span>• {job.industry}</span>}
+                      {typeof job.qualityScore === "number" && <span>• Quality {job.qualityScore}</span>}
+                    </div>
+
+                    {Array.isArray(job.moderationFlags) && job.moderationFlags.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {job.moderationFlags.slice(0, 4).map((flag) => (
+                          <span
+                            key={`${job.id}-${flag}`}
+                            className="chip bg-orange-500/25 text-orange-100 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.45)] normal-case tracking-normal"
+                          >
+                            {flag.replaceAll("_", " ")}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ModalSheet>
+    </>
   );
 };
 
