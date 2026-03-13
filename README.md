@@ -171,6 +171,15 @@ npm run dev
 | MONGO_URI | Yes | mongodb://127.0.0.1:27017/jobhuntr | MongoDB connection string |
 | JWT_SECRET | Yes | replace_with_a_strong_secret | JWT signing secret |
 | CLIENT_URL | Yes | http://localhost:5173 | CORS allowlist origin |
+| APP_NAME | No | JobHuntr | Brand name used in outbound emails |
+| SMTP_HOST | Conditional | smtp.example.com | SMTP host; required when SMTP_URL is not set |
+| SMTP_PORT | Conditional | 587 | SMTP port; required when SMTP_URL is not set |
+| SMTP_SECURE | No | false | Set `true` for implicit TLS (typically port 465) |
+| SMTP_USER | Conditional | your_smtp_user | SMTP username; required when SMTP_URL is not set |
+| SMTP_PASS | Conditional | your_smtp_password | SMTP password; required when SMTP_URL is not set |
+| SMTP_FROM_EMAIL | Conditional | no-reply@example.com | Sender email address shown to users |
+| SMTP_FROM_NAME | No | JobHuntr | Sender display name |
+| SMTP_URL | Optional alternative | smtps://username:password@smtp.example.com:465 | Use this instead of SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS |
 
 ### `client/.env`
 

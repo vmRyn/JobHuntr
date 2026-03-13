@@ -1,12 +1,56 @@
 import CompanyInvite from "../models/CompanyInvite.js";
 import User from "../models/User.js";
 import createToken from "../utils/createToken.js";
+import { buildCompanyInviteEmail } from "../utils/emailTemplates.js";
+import { sendTransactionalEmail } from "../utils/mailer.js";
 import { attachProfileCompletion } from "../utils/profileCompletion.js";
 import { canManageTeam, getCompanyAccountId, getCompanyRole } from "../utils/companyAccess.js";
 import { expiresInMinutes, generateToken, hashToken } from "../utils/securityTokens.js";
 
 const allowedInviteRoles = new Set(["recruiter", "viewer"]);
 const isNonProduction = process.env.NODE_ENV !== "production";
+const appName = String(process.env.APP_NAME || "JobHuntr").trim() || "JobHuntr";
+const clientAppUrl = String(process.env.CLIENT_URL || "http://localhost:5173").trim();
+
+const buildClientUrl = (path, query = {}) => {
+  const safeBase = clientAppUrl || "http://localhost:5173";
+  const normalizedBase = safeBase.endsWith("/") ? safeBase : `${safeBase}/`;
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+
+  const url = new URL(normalizedPath, normalizedBase);
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    const normalizedValue = String(value).trim();
+    if (!normalizedValue) {
+      return;
+    }
+
+    url.searchParams.set(key, normalizedValue);
+  });
+
+  return url.toString();
+};
+
+const sendInviteEmail = async ({ to, message }) => {
+  try {
+    return await sendTransactionalEmail({
+      to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html
+    });
+  } catch (error) {
+    console.error("[email:company_invite] Failed to send invite email", error);
+    return {
+      delivered: false,
+      reason: "send_failed"
+    };
+  }
+};
 
 const toInviteSummary = (invite) => ({
   id: String(invite._id),
@@ -149,6 +193,19 @@ export const createCompanyInvite = async (req, res) => {
         setDefaultsOnInsert: true
       }
     );
+
+    const companyName = req.user.companyProfile?.companyName || "Your company";
+    const inviteUrl = buildClientUrl("accept-company-invite", { token });
+    await sendInviteEmail({
+      to: email,
+      message: buildCompanyInviteEmail({
+        appName,
+        inviteUrl,
+        companyName,
+        role: roleInput,
+        expiresAt
+      })
+    });
 
     return res.status(201).json({
       invite: toInviteSummary(invite),

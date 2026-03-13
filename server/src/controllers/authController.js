@@ -1,5 +1,11 @@
 import User from "../models/User.js";
 import createToken from "../utils/createToken.js";
+import {
+  buildEmailVerificationEmail,
+  buildPasswordResetEmail,
+  buildTwoFactorCodeEmail
+} from "../utils/emailTemplates.js";
+import { sendTransactionalEmail } from "../utils/mailer.js";
 import { attachProfileCompletion } from "../utils/profileCompletion.js";
 import {
   expiresInMinutes,
@@ -38,6 +44,48 @@ const parseSkills = (skills) => {
 };
 
 const isNonProduction = process.env.NODE_ENV !== "production";
+const appName = String(process.env.APP_NAME || "JobHuntr").trim() || "JobHuntr";
+const clientAppUrl = String(process.env.CLIENT_URL || "http://localhost:5173").trim();
+
+const buildClientUrl = (path, query = {}) => {
+  const safeBase = clientAppUrl || "http://localhost:5173";
+  const normalizedBase = safeBase.endsWith("/") ? safeBase : `${safeBase}/`;
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+
+  const url = new URL(normalizedPath, normalizedBase);
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    const normalizedValue = String(value).trim();
+    if (!normalizedValue) {
+      return;
+    }
+
+    url.searchParams.set(key, normalizedValue);
+  });
+
+  return url.toString();
+};
+
+const sendAuthEmail = async ({ to, message, context }) => {
+  try {
+    return await sendTransactionalEmail({
+      to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html
+    });
+  } catch (error) {
+    console.error(`[email:${context}] Failed to send transactional email`, error);
+    return {
+      delivered: false,
+      reason: "send_failed"
+    };
+  }
+};
 
 const clearRecoveryState = (user) => {
   user.passwordResetTokenHash = "";
@@ -165,6 +213,17 @@ export const register = async (req, res) => {
     const verificationToken = issueEmailVerificationToken(user);
     await user.save();
 
+    const verifyUrl = buildClientUrl("verify-email", { token: verificationToken });
+    await sendAuthEmail({
+      to: user.email,
+      message: buildEmailVerificationEmail({
+        appName,
+        verifyUrl,
+        expiresHours: 24
+      }),
+      context: "register_verification"
+    });
+
     const authPayload = await buildAuthSuccessPayload(user._id);
 
     return res.status(201).json({
@@ -214,6 +273,16 @@ export const login = async (req, res) => {
     if (user.twoFactorEnabled) {
       const { challengeCode, pendingToken } = issueTwoFactorChallenge(user);
       await user.save();
+
+      await sendAuthEmail({
+        to: user.email,
+        message: buildTwoFactorCodeEmail({
+          appName,
+          code: challengeCode,
+          expiresMinutes: 10
+        }),
+        context: "login_two_factor"
+      });
 
       return res.status(202).json({
         requiresTwoFactor: true,
@@ -287,6 +356,17 @@ export const requestPasswordReset = async (req, res) => {
     if (user) {
       resetToken = issuePasswordResetToken(user);
       await user.save();
+
+      const resetUrl = buildClientUrl("reset-password", { token: resetToken });
+      await sendAuthEmail({
+        to: user.email,
+        message: buildPasswordResetEmail({
+          appName,
+          resetUrl,
+          expiresMinutes: 30
+        }),
+        context: "password_reset"
+      });
     }
 
     return res.json({
@@ -378,8 +458,19 @@ export const requestEmailVerification = async (req, res) => {
     const verificationToken = issueEmailVerificationToken(user);
     await user.save();
 
+    const verifyUrl = buildClientUrl("verify-email", { token: verificationToken });
+    await sendAuthEmail({
+      to: user.email,
+      message: buildEmailVerificationEmail({
+        appName,
+        verifyUrl,
+        expiresHours: 24
+      }),
+      context: "verification_request"
+    });
+
     return res.json({
-      message: "Verification token generated",
+      message: "Verification email sent",
       ...(isNonProduction
         ? {
             emailVerificationPreviewToken: verificationToken
@@ -431,8 +522,18 @@ export const requestTwoFactorSetup = async (req, res) => {
     user.twoFactorCodeExpiresAt = expiresInMinutes(10);
     await user.save();
 
+    await sendAuthEmail({
+      to: user.email,
+      message: buildTwoFactorCodeEmail({
+        appName,
+        code: challengeCode,
+        expiresMinutes: 10
+      }),
+      context: "two_factor_setup"
+    });
+
     return res.json({
-      message: "Two-factor setup code generated",
+      message: "Two-factor setup code sent",
       ...(isNonProduction
         ? {
             twoFactorPreviewCode: challengeCode
