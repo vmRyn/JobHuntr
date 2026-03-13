@@ -35,6 +35,7 @@ import { getProfileCompletionState } from "../utils/profileCompletion";
 const createInitialProfile = (user) => ({
   name: user?.seekerProfile?.name || "",
   bio: user?.seekerProfile?.bio || "",
+  linkedinUrl: user?.seekerProfile?.linkedinUrl || "",
   skills: user?.seekerProfile?.skills || [],
   industryField: user?.seekerProfile?.industryField || user?.seekerProfile?.experience || "",
   location: user?.seekerProfile?.location || "",
@@ -618,6 +619,7 @@ const SeekerDashboard = () => {
       formData.append("skills", JSON.stringify(profileForm.skills));
       formData.append("industryField", profileForm.industryField);
       formData.append("location", profileForm.location);
+      formData.append("linkedinUrl", profileForm.linkedinUrl);
 
       if (profileFiles.profilePicture) {
         formData.append("profilePicture", profileFiles.profilePicture);
@@ -1254,6 +1256,14 @@ const SeekerDashboard = () => {
           onChange={handleProfileChange}
           placeholder="Software Engineering"
           suggestions={industryOptions}
+        />
+        <InputField
+          label="LinkedIn profile"
+          type="url"
+          name="linkedinUrl"
+          value={profileForm.linkedinUrl}
+          onChange={handleProfileChange}
+          placeholder="https://www.linkedin.com/in/your-name"
         />
         <SkillsInput
           label="Skills"

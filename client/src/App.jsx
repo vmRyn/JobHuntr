@@ -4,6 +4,8 @@ import Navbar from "./components/Navbar";
 import { useAuth } from "./context/AuthContext";
 import CompanyDashboard from "./pages/CompanyDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import AboutPage from "./pages/AboutPage";
+import CareersPage from "./pages/CareersPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -33,6 +35,8 @@ const App = () => {
 
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/careers" element={<CareersPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route

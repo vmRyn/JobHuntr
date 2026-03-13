@@ -33,6 +33,39 @@ const parseSkills = (skills) => {
 
 const getUploadedFile = (files, fieldName) => files?.[fieldName]?.[0] || null;
 
+const normalizeLinkedInUrl = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  let parsed;
+  try {
+    parsed = new URL(withProtocol);
+  } catch (error) {
+    return null;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const isLinkedInHost = /(^|\.)linkedin\.[a-z.]+$/i.test(hostname);
+
+  if (!isLinkedInHost) {
+    return null;
+  }
+
+  return parsed.toString();
+};
+
 export const getMyProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select("-password").populate("jobListings");
@@ -56,7 +89,7 @@ export const updateMyProfile = async (req, res) => {
     }
 
     if (user.userType === "seeker") {
-      const { name, bio, skills, experience, industryField, location, profilePicture } = req.body;
+      const { name, bio, skills, experience, industryField, location, profilePicture, linkedinUrl } = req.body;
       const uploadedProfilePicture = getUploadedFile(req.files, "profilePicture");
       const uploadedCv = getUploadedFile(req.files, "cv");
 
@@ -67,6 +100,15 @@ export const updateMyProfile = async (req, res) => {
         user.seekerProfile.industryField = industryField ?? experience;
       }
       if (location !== undefined) user.seekerProfile.location = location;
+      if (linkedinUrl !== undefined) {
+        const normalizedLinkedInUrl = normalizeLinkedInUrl(linkedinUrl);
+
+        if (normalizedLinkedInUrl === null) {
+          return res.status(400).json({ message: "Enter a valid LinkedIn URL" });
+        }
+
+        user.seekerProfile.linkedinUrl = normalizedLinkedInUrl;
+      }
       if (profilePicture !== undefined && profilePicture.trim()) {
         user.seekerProfile.profilePicture = profilePicture;
       }
@@ -83,12 +125,21 @@ export const updateMyProfile = async (req, res) => {
     }
 
     if (user.userType === "company") {
-      const { companyName, description, industry, logo } = req.body;
+      const { companyName, description, industry, logo, linkedinUrl } = req.body;
       const uploadedLogo = getUploadedFile(req.files, "logo");
 
       if (companyName !== undefined) user.companyProfile.companyName = companyName;
       if (description !== undefined) user.companyProfile.description = description;
       if (industry !== undefined) user.companyProfile.industry = industry;
+      if (linkedinUrl !== undefined) {
+        const normalizedLinkedInUrl = normalizeLinkedInUrl(linkedinUrl);
+
+        if (normalizedLinkedInUrl === null) {
+          return res.status(400).json({ message: "Enter a valid LinkedIn URL" });
+        }
+
+        user.companyProfile.linkedinUrl = normalizedLinkedInUrl;
+      }
       if (logo !== undefined && logo.trim()) user.companyProfile.logo = logo;
       if (uploadedLogo) {
         user.companyProfile.logo = toPublicUploadPath(uploadedLogo.path);

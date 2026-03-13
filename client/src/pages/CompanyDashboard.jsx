@@ -47,6 +47,7 @@ const createInitialProfile = (user) => ({
   companyName: user?.companyProfile?.companyName || "",
   description: user?.companyProfile?.description || "",
   industry: user?.companyProfile?.industry || "",
+  linkedinUrl: user?.companyProfile?.linkedinUrl || "",
   logo: user?.companyProfile?.logo || ""
 });
 
@@ -615,6 +616,7 @@ const CompanyDashboard = () => {
       formData.append("companyName", profileForm.companyName);
       formData.append("description", profileForm.description);
       formData.append("industry", profileForm.industry);
+      formData.append("linkedinUrl", profileForm.linkedinUrl);
 
       if (profileFiles.logo) {
         formData.append("logo", profileFiles.logo);
@@ -1095,6 +1097,14 @@ const CompanyDashboard = () => {
           value={profileForm.industry}
           onChange={handleProfileChange}
           placeholder="Software"
+        />
+        <InputField
+          label="LinkedIn page"
+          type="url"
+          name="linkedinUrl"
+          value={profileForm.linkedinUrl}
+          onChange={handleProfileChange}
+          placeholder="https://www.linkedin.com/company/your-company"
         />
         <FileUploadField
           className="md:col-span-2"

@@ -6,6 +6,18 @@ import ModalSheet from "./ui/ModalSheet";
 
 const getCandidate = (profileData, match) => profileData?.seeker || match?.seeker || null;
 const getMatchedJob = (profileData, match) => profileData?.job || match?.job || null;
+const toExternalLink = (url) => {
+  if (!url || typeof url !== "string") {
+    return "";
+  }
+
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
 
 const CandidateProfileSheet = ({ open, onClose, match }) => {
   const [profileData, setProfileData] = useState(null);
@@ -17,6 +29,7 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
   const seekerProfile = candidate?.seekerProfile || {};
   const profileImage = getAssetUrl(seekerProfile.profilePicture);
   const cvUrl = getAssetUrl(seekerProfile.cvUrl);
+  const linkedInUrl = toExternalLink(seekerProfile.linkedinUrl);
   const displayName = seekerProfile.name || "Candidate";
   const industryField = seekerProfile.industryField || seekerProfile.experience || "Not specified";
 
@@ -73,6 +86,16 @@ const CandidateProfileSheet = ({ open, onClose, match }) => {
                 <span className="chip chip-accent normal-case tracking-normal">{industryField}</span>
                 {matchedJob?.title && <span className="chip normal-case tracking-normal">{matchedJob.title}</span>}
               </div>
+              {linkedInUrl && (
+                <a
+                  href={linkedInUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center justify-center rounded-xl border border-brandStrong/45 bg-brand/20 px-3 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100 transition hover:border-brandStrong/70"
+                >
+                  LinkedIn
+                </a>
+              )}
             </div>
           </div>
 

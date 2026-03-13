@@ -1,11 +1,25 @@
 import { getAssetUrl } from "../utils/assets";
 import VerifiedBadge from "./ui/VerifiedBadge";
 
+const toExternalLink = (url) => {
+  if (!url || typeof url !== "string") {
+    return "";
+  }
+
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
 const JobCardContent = ({ job }) => {
   const companyName = job.company?.companyProfile?.companyName || "Company";
   const companyIndustry = job.company?.companyProfile?.industry || "Industry not set";
   const companyLogo = getAssetUrl(job.company?.companyProfile?.logo);
   const companyVerified = Boolean(job.company?.companyProfile?.isVerified);
+  const companyLinkedInUrl = toExternalLink(job.company?.companyProfile?.linkedinUrl);
   const jobIndustry = job.industry || companyIndustry;
 
   return (
@@ -29,6 +43,16 @@ const JobCardContent = ({ job }) => {
               {companyVerified && <VerifiedBadge compact />}
             </div>
             <p className="text-sm text-slate-200">{jobIndustry}</p>
+            {companyLinkedInUrl && (
+              <a
+                href={companyLinkedInUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex text-xs font-semibold uppercase tracking-[0.12em] text-cyan-200 transition hover:text-cyan-100"
+              >
+                LinkedIn
+              </a>
+            )}
           </div>
         </div>
         <span className="chip chip-accent">New</span>

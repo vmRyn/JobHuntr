@@ -7,6 +7,7 @@ const seekerProfileSchema = new Schema(
   {
     name: { type: String, trim: true, default: "" },
     bio: { type: String, trim: true, default: "" },
+    linkedinUrl: { type: String, trim: true, default: "" },
     skills: [{ type: String, trim: true }],
     experience: { type: String, trim: true, default: "" },
     industryField: { type: String, trim: true, default: "" },
@@ -23,6 +24,7 @@ const companyProfileSchema = new Schema(
     companyName: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
     industry: { type: String, trim: true, default: "" },
+    linkedinUrl: { type: String, trim: true, default: "" },
     logo: { type: String, trim: true, default: "" },
     isVerified: { type: Boolean, default: false },
     verifiedAt: { type: Date, default: null },
