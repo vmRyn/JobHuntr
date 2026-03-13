@@ -38,6 +38,7 @@ const RegisterPage = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const isSeeker = userType === "seeker";
   const accountTabs = [
@@ -68,6 +69,7 @@ const RegisterPage = () => {
 
     setLoading(true);
     setError("");
+    setNotice("");
 
     try {
       const payload = {
@@ -90,8 +92,17 @@ const RegisterPage = () => {
             })
       };
 
-      const user = await register(payload);
-      navigate(user.userType === "company" ? "/company" : "/seeker");
+      const result = await register(payload);
+      const authenticatedUser = result.user;
+
+      if (result.emailVerificationRequired) {
+        const previewSuffix = result.emailVerificationPreviewToken
+          ? ` Dev token: ${result.emailVerificationPreviewToken}`
+          : "";
+        setNotice(`Account created. Verify your email from Account Security.${previewSuffix}`);
+      }
+
+      navigate(authenticatedUser.userType === "company" ? "/company" : "/seeker");
     } catch (requestError) {
       setError(requestError.response?.data?.message || "Registration failed");
     } finally {
@@ -252,6 +263,7 @@ const RegisterPage = () => {
             </form>
 
             {error && <p className="status-error">{error}</p>}
+            {notice && <p className="status-success">{notice}</p>}
 
             <p className="text-sm text-slate-300">
               Already have an account?{" "}

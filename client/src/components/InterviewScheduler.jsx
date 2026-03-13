@@ -48,6 +48,17 @@ const defaultFormState = () => {
   };
 };
 
+const buildRescheduleDraft = (interview) => ({
+  proposedStartAt: toInputDateTime(interview?.startAt),
+  proposedEndAt: toInputDateTime(interview?.endAt),
+  proposedTimezone: interview?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  proposedLocation: interview?.location || "",
+  responseNote: ""
+});
+
+const formatResponseStatus = (value = "pending") =>
+  value.replaceAll("_", " ").toUpperCase();
+
 const getCreatorName = (interview) => {
   const creator = interview?.createdBy;
   if (!creator || typeof creator !== "object") {
@@ -72,6 +83,9 @@ const InterviewScheduler = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState("");
+  const [respondingId, setRespondingId] = useState("");
+  const [rescheduleDrafts, setRescheduleDrafts] = useState({});
+  const [rescheduleOpenId, setRescheduleOpenId] = useState("");
   const [attachingInterviewId, setAttachingInterviewId] = useState("");
   const [form, setForm] = useState(defaultFormState);
 
@@ -104,6 +118,8 @@ const InterviewScheduler = ({
 
   useEffect(() => {
     setForm(defaultFormState());
+    setRescheduleDrafts({});
+    setRescheduleOpenId("");
     loadInterviews();
   }, [selectedMatchId]);
 
@@ -176,6 +192,76 @@ const InterviewScheduler = ({
     }
   };
 
+  const handleRespondToInterview = async (interview, action, payload = {}) => {
+    if (!selectedMatchId || !interview?._id || respondingId) {
+      return;
+    }
+
+    setRespondingId(interview._id);
+
+    try {
+      await api.post(`/matches/${selectedMatchId}/interviews/${interview._id}/respond`, {
+        action,
+        ...payload
+      });
+
+      setRescheduleOpenId("");
+      const actionLabel =
+        action === "accept"
+          ? "accepted"
+          : action === "decline"
+            ? "declined"
+            : "reschedule requested";
+      onNotice?.(`Interview ${actionLabel}`);
+      await loadInterviews();
+    } catch (requestError) {
+      onError?.(requestError.response?.data?.message || "Failed to respond to interview");
+    } finally {
+      setRespondingId("");
+    }
+  };
+
+  const openRescheduleForm = (interview) => {
+    if (!interview?._id) {
+      return;
+    }
+
+    setRescheduleDrafts((prev) => ({
+      ...prev,
+      [interview._id]: prev[interview._id] || buildRescheduleDraft(interview)
+    }));
+    setRescheduleOpenId(interview._id);
+  };
+
+  const handleRescheduleDraftChange = (interviewId, event) => {
+    const { name, value } = event.target;
+
+    setRescheduleDrafts((prev) => ({
+      ...prev,
+      [interviewId]: {
+        ...(prev[interviewId] || {}),
+        [name]: value
+      }
+    }));
+  };
+
+  const submitRescheduleRequest = async (interview) => {
+    const draft = rescheduleDrafts[interview._id] || buildRescheduleDraft(interview);
+
+    if (!draft.proposedStartAt || !draft.proposedEndAt) {
+      onError?.("Start and end are required for a reschedule request");
+      return;
+    }
+
+    await handleRespondToInterview(interview, "reschedule", {
+      proposedStartAt: new Date(draft.proposedStartAt).toISOString(),
+      proposedEndAt: new Date(draft.proposedEndAt).toISOString(),
+      proposedTimezone: draft.proposedTimezone,
+      proposedLocation: draft.proposedLocation,
+      responseNote: draft.responseNote
+    });
+  };
+
   return (
     <Card className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -189,7 +275,9 @@ const InterviewScheduler = ({
       {!selectedMatch && <div className="empty-state">Select a match to schedule interviews.</div>}
 
       {selectedMatch && !canSchedule && (
-        <div className="empty-state">Only employers can schedule interviews. You can view updates here.</div>
+        <div className="empty-state">
+          Employers schedule interviews. You can still accept, decline, or request a reschedule.
+        </div>
       )}
 
       {selectedMatch && canSchedule && (
@@ -287,6 +375,12 @@ const InterviewScheduler = ({
                         {toLocalDisplay(interview.startAt)} - {toLocalDisplay(interview.endAt)}
                       </p>
                       <p className="text-xs text-slate-300">Hosted by {getCreatorName(interview)}</p>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <span className="chip chip-accent">{(interview.status || "scheduled").toUpperCase()}</span>
+                        <span className="chip normal-case tracking-normal">
+                          Response: {formatResponseStatus(interview.responseStatus || "pending")}
+                        </span>
+                      </div>
                     </div>
 
                     {canSchedule ? (
@@ -298,9 +392,7 @@ const InterviewScheduler = ({
                         className="w-40"
                         required
                       />
-                    ) : (
-                      <span className="chip chip-accent">{(interview.status || "scheduled").toUpperCase()}</span>
-                    )}
+                    ) : null}
                   </div>
 
                   {interview.location && (
@@ -311,7 +403,52 @@ const InterviewScheduler = ({
                     <p className="mt-1 text-xs leading-relaxed text-slate-300">{interview.notes}</p>
                   )}
 
+                  {interview.responseNote && (
+                    <p className="mt-1 text-xs text-slate-300">Response note: {interview.responseNote}</p>
+                  )}
+
+                  {interview.rescheduleProposal?.startAt && (
+                    <p className="mt-1 text-xs text-slate-300">
+                      Proposed window: {toLocalDisplay(interview.rescheduleProposal.startAt)} - {toLocalDisplay(interview.rescheduleProposal.endAt)}
+                      {interview.rescheduleProposal.location ? ` • ${interview.rescheduleProposal.location}` : ""}
+                    </p>
+                  )}
+
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={respondingId === interview._id}
+                      onClick={() => {
+                        const responseNote = window.prompt("Response note (optional)", "") || "";
+                        handleRespondToInterview(interview, "accept", { responseNote });
+                      }}
+                    >
+                      Accept
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="sm"
+                      disabled={respondingId === interview._id}
+                      onClick={() => {
+                        const responseNote = window.prompt("Response note (optional)", "") || "";
+                        handleRespondToInterview(interview, "decline", { responseNote });
+                      }}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={respondingId === interview._id}
+                      onClick={() => openRescheduleForm(interview)}
+                    >
+                      Request reschedule
+                    </Button>
+
                     {allowAttachToConversation && (
                       <Button
                         type="button"
@@ -349,6 +486,73 @@ const InterviewScheduler = ({
 
                   {canSchedule && statusUpdatingId === interview._id && (
                     <p className="mt-2 text-xs text-slate-300">Updating status...</p>
+                  )}
+
+                  {respondingId === interview._id && (
+                    <p className="mt-2 text-xs text-slate-300">Submitting response...</p>
+                  )}
+
+                  {rescheduleOpenId === interview._id && (
+                    <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-slate-950/62 p-3 md:grid-cols-2">
+                      <InputField
+                        label="Proposed start"
+                        type="datetime-local"
+                        name="proposedStartAt"
+                        value={rescheduleDrafts[interview._id]?.proposedStartAt || ""}
+                        onChange={(event) => handleRescheduleDraftChange(interview._id, event)}
+                        required
+                      />
+                      <InputField
+                        label="Proposed end"
+                        type="datetime-local"
+                        name="proposedEndAt"
+                        value={rescheduleDrafts[interview._id]?.proposedEndAt || ""}
+                        onChange={(event) => handleRescheduleDraftChange(interview._id, event)}
+                        required
+                      />
+                      <InputField
+                        label="Timezone"
+                        name="proposedTimezone"
+                        value={rescheduleDrafts[interview._id]?.proposedTimezone || ""}
+                        onChange={(event) => handleRescheduleDraftChange(interview._id, event)}
+                        placeholder="Europe/London"
+                      />
+                      <InputField
+                        label="Location"
+                        name="proposedLocation"
+                        value={rescheduleDrafts[interview._id]?.proposedLocation || ""}
+                        onChange={(event) => handleRescheduleDraftChange(interview._id, event)}
+                        placeholder="Meeting link or office"
+                      />
+                      <InputField
+                        className="md:col-span-2"
+                        as="textarea"
+                        label="Reschedule note"
+                        name="responseNote"
+                        value={rescheduleDrafts[interview._id]?.responseNote || ""}
+                        onChange={(event) => handleRescheduleDraftChange(interview._id, event)}
+                        placeholder="Why you are proposing a new time"
+                      />
+                      <div className="md:col-span-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={respondingId === interview._id}
+                          onClick={() => submitRescheduleRequest(interview)}
+                        >
+                          Submit reschedule
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={respondingId === interview._id}
+                          onClick={() => setRescheduleOpenId("")}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               );

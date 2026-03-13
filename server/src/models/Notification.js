@@ -12,7 +12,18 @@ const notificationSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["interview_scheduled"],
+      enum: [
+        "interview_scheduled",
+        "interview_updated",
+        "interview_response",
+        "new_message",
+        "match_created",
+        "moderation_action",
+        "offer_created",
+        "offer_updated",
+        "support_ticket_update",
+        "system"
+      ],
       required: true
     },
     title: {
@@ -62,6 +73,10 @@ const notificationSchema = new Schema(
       type: String,
       trim: true,
       default: ""
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {}
     },
     isRead: {
       type: Boolean,

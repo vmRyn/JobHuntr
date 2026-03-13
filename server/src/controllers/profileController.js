@@ -2,6 +2,12 @@ import User from "../models/User.js";
 import Swipe from "../models/Swipe.js";
 import { toPublicUploadPath } from "../middleware/upload.js";
 import { attachProfileCompletion } from "../utils/profileCompletion.js";
+import {
+  canManageProfile,
+  canViewCompanyData,
+  getCompanyAccountId,
+  getCompanyRole
+} from "../utils/companyAccess.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills;
@@ -29,6 +35,41 @@ const parseSkills = (skills) => {
       .filter(Boolean);
   }
   return undefined;
+};
+
+const parseStringList = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter(Boolean);
+      }
+    } catch (error) {
+      // Fall back to newline parsing.
+    }
+  }
+
+  return trimmed
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 const getUploadedFile = (files, fieldName) => files?.[fieldName]?.[0] || null;
@@ -68,6 +109,31 @@ const normalizeLinkedInUrl = (value) => {
 
 export const getMyProfile = async (req, res) => {
   try {
+    if (req.user.userType === "company") {
+      const companyId = getCompanyAccountId(req.user);
+      const role = getCompanyRole(req.user);
+
+      if (!canViewCompanyData(role)) {
+        return res.status(403).json({ message: "Insufficient company permissions" });
+      }
+
+      const [companyAccount, sessionUser] = await Promise.all([
+        User.findById(companyId).select("-password").populate("jobListings"),
+        User.findById(req.user._id).select("-password")
+      ]);
+
+      if (!companyAccount || !sessionUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const response = sessionUser.toObject();
+      response.companyProfile = companyAccount.companyProfile || {};
+      response.jobListings = companyAccount.jobListings || [];
+      response.companyAccess = sessionUser.companyAccess || { role: "owner", companyAccount: null };
+
+      return res.json(attachProfileCompletion(response));
+    }
+
     const user = await User.findById(req.user._id).select("-password").populate("jobListings");
 
     if (!user) {
@@ -82,7 +148,10 @@ export const getMyProfile = async (req, res) => {
 
 export const updateMyProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("+password");
+    const targetUserId =
+      req.user.userType === "company" ? getCompanyAccountId(req.user) : req.user._id;
+
+    const user = await User.findById(targetUserId).select("+password");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -90,6 +159,11 @@ export const updateMyProfile = async (req, res) => {
 
     if (user.userType === "seeker") {
       const { name, bio, skills, experience, industryField, location, profilePicture, linkedinUrl } = req.body;
+      const portfolioUrl = req.body?.portfolioUrl;
+      const projects = req.body?.projects;
+      const education = req.body?.education;
+      const certifications = req.body?.certifications;
+      const workHistoryTimeline = req.body?.workHistoryTimeline;
       const uploadedProfilePicture = getUploadedFile(req.files, "profilePicture");
       const uploadedCv = getUploadedFile(req.files, "cv");
 
@@ -100,6 +174,7 @@ export const updateMyProfile = async (req, res) => {
         user.seekerProfile.industryField = industryField ?? experience;
       }
       if (location !== undefined) user.seekerProfile.location = location;
+      if (portfolioUrl !== undefined) user.seekerProfile.portfolioUrl = String(portfolioUrl || "").trim();
       if (linkedinUrl !== undefined) {
         const normalizedLinkedInUrl = normalizeLinkedInUrl(linkedinUrl);
 
@@ -122,15 +197,39 @@ export const updateMyProfile = async (req, res) => {
 
       const parsedSkills = parseSkills(skills);
       if (parsedSkills !== undefined) user.seekerProfile.skills = parsedSkills;
+
+      const parsedProjects = parseStringList(projects);
+      if (parsedProjects !== undefined) user.seekerProfile.projects = parsedProjects;
+
+      const parsedEducation = parseStringList(education);
+      if (parsedEducation !== undefined) user.seekerProfile.education = parsedEducation;
+
+      const parsedCertifications = parseStringList(certifications);
+      if (parsedCertifications !== undefined) {
+        user.seekerProfile.certifications = parsedCertifications;
+      }
+
+      const parsedWorkHistory = parseStringList(workHistoryTimeline);
+      if (parsedWorkHistory !== undefined) {
+        user.seekerProfile.workHistoryTimeline = parsedWorkHistory;
+      }
     }
 
     if (user.userType === "company") {
-      const { companyName, description, industry, logo, linkedinUrl } = req.body;
+      const role = getCompanyRole(req.user);
+      if (!canManageProfile(role)) {
+        return res.status(403).json({ message: "Only company owners can update company profile" });
+      }
+
+      const { companyName, description, industry, logo, linkedinUrl, website, proofDocuments } = req.body;
       const uploadedLogo = getUploadedFile(req.files, "logo");
 
       if (companyName !== undefined) user.companyProfile.companyName = companyName;
       if (description !== undefined) user.companyProfile.description = description;
       if (industry !== undefined) user.companyProfile.industry = industry;
+      if (website !== undefined) {
+        user.companyProfile.website = String(website || "").trim();
+      }
       if (linkedinUrl !== undefined) {
         const normalizedLinkedInUrl = normalizeLinkedInUrl(linkedinUrl);
 
@@ -144,11 +243,28 @@ export const updateMyProfile = async (req, res) => {
       if (uploadedLogo) {
         user.companyProfile.logo = toPublicUploadPath(uploadedLogo.path);
       }
+
+      const parsedProofDocuments = parseStringList(proofDocuments);
+      if (parsedProofDocuments !== undefined) {
+        user.companyProfile.proofDocuments = parsedProofDocuments;
+      }
     }
 
     await user.save();
 
-    const safeUser = await User.findById(user._id).select("-password").populate("jobListings");
+    const [safeUser, sessionUser] = await Promise.all([
+      User.findById(user._id).select("-password").populate("jobListings"),
+      User.findById(req.user._id).select("-password")
+    ]);
+
+    if (sessionUser?.userType === "company" && safeUser?._id?.toString() !== sessionUser._id.toString()) {
+      const response = sessionUser.toObject();
+      response.companyProfile = safeUser.companyProfile || {};
+      response.jobListings = safeUser.jobListings || [];
+
+      return res.json(attachProfileCompletion(response));
+    }
+
     return res.json(attachProfileCompletion(safeUser));
   } catch (error) {
     return res.status(500).json({ message: "Failed to update profile" });
@@ -161,12 +277,19 @@ export const getCandidates = async (req, res) => {
       return res.status(403).json({ message: "Only companies can access candidates" });
     }
 
+    const role = getCompanyRole(req.user);
+    if (!canViewCompanyData(role)) {
+      return res.status(403).json({ message: "Insufficient company permissions" });
+    }
+
+    const companyId = getCompanyAccountId(req.user);
+
     const { jobId } = req.query;
 
     let swipedCandidateIds = [];
     if (jobId) {
       const existingSwipes = await Swipe.find({
-        swiper: req.user._id,
+        swiper: companyId,
         targetType: "candidate",
         targetJob: jobId
       }).select("targetUser");

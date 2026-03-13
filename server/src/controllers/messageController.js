@@ -5,11 +5,32 @@ import User from "../models/User.js";
 import { getIO } from "../config/socket.js";
 import { toPublicUploadPath } from "../middleware/upload.js";
 import { analyzeMessageSafety } from "../utils/moderationSignals.js";
+import { notifyUser } from "../utils/notifications.js";
+import { getCompanyAccountId } from "../utils/companyAccess.js";
 
-const isParticipant = (match, userId) =>
-  match &&
-  (match.seeker.toString() === userId.toString() ||
-    match.company.toString() === userId.toString());
+const resolveParticipantId = (user) => {
+  if (!user) {
+    return "";
+  }
+
+  if (user.userType === "company") {
+    return getCompanyAccountId(user);
+  }
+
+  return user._id?.toString?.() || "";
+};
+
+const isParticipant = (match, user) => {
+  const participantId = resolveParticipantId(user);
+  if (!match || !participantId) {
+    return false;
+  }
+
+  return (
+    match.seeker.toString() === participantId ||
+    match.company.toString() === participantId
+  );
+};
 
 const validReactions = new Set(["👍", "❤️", "🎉", "🔥", "👏", "👀"]);
 
@@ -54,7 +75,7 @@ export const getMessagesByMatchId = async (req, res) => {
       return res.status(404).json({ message: "Match not found" });
     }
 
-    if (!isParticipant(match, req.user._id)) {
+    if (!isParticipant(match, req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -80,11 +101,13 @@ export const sendMessage = async (req, res) => {
       return res.status(404).json({ message: "Match not found" });
     }
 
-    if (!isParticipant(match, req.user._id)) {
+    if (!isParticipant(match, req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const sender = await User.findById(req.user._id).select("moderation");
+    const senderParticipantId = resolveParticipantId(req.user);
+
+    const sender = await User.findById(senderParticipantId).select("moderation");
     const restrictionUntil = sender?.moderation?.chatRestrictedUntil
       ? new Date(sender.moderation.chatRestrictedUntil)
       : null;
@@ -99,18 +122,18 @@ export const sendMessage = async (req, res) => {
     }
 
     const receiverId =
-      match.seeker.toString() === req.user._id.toString() ? match.company : match.seeker;
+      match.seeker.toString() === senderParticipantId ? match.company : match.seeker;
 
     const payload = {
       match: matchId,
-      sender: req.user._id,
+      sender: senderParticipantId,
       receiver: receiverId,
       text,
-      readBy: [req.user._id]
+      readBy: [senderParticipantId]
     };
 
     if (interviewId) {
-      if (req.user.userType !== "company" || match.company.toString() !== req.user._id.toString()) {
+      if (req.user.userType !== "company" || match.company.toString() !== senderParticipantId) {
         return res.status(403).json({ message: "Only the matched company can attach interviews" });
       }
 
@@ -186,7 +209,7 @@ export const sendMessage = async (req, res) => {
         };
       }
 
-      await User.findByIdAndUpdate(req.user._id, updatePayload);
+      await User.findByIdAndUpdate(senderParticipantId, updatePayload);
 
       await Report.create({
         sourceType: "automation",
@@ -217,6 +240,21 @@ export const sendMessage = async (req, res) => {
       // Socket.io may not be available in some test contexts.
     }
 
+    await notifyUser({
+      userId: receiverId,
+      type: "new_message",
+      title: "New Message",
+      message:
+        req.user.userType === "company"
+          ? `${req.user.companyProfile?.companyName || "Company"} sent you a message`
+          : `${req.user.seekerProfile?.name || "Candidate"} sent you a message`,
+      metadata: {
+        matchId: match._id,
+        jobId: match.job,
+        companyId: match.company
+      }
+    });
+
     return res.status(201).json(safeMessage);
   } catch (error) {
     return res.status(500).json({ message: "Failed to send message" });
@@ -232,14 +270,16 @@ export const markMessagesAsRead = async (req, res) => {
       return res.status(404).json({ message: "Match not found" });
     }
 
-    if (!isParticipant(match, req.user._id)) {
+    if (!isParticipant(match, req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
+    const participantId = resolveParticipantId(req.user);
+
     const unreadMessages = await Message.find({
       match: matchId,
-      receiver: req.user._id,
-      readBy: { $ne: req.user._id }
+      receiver: participantId,
+      readBy: { $ne: participantId }
     }).select("_id");
 
     const messageIds = unreadMessages.map((message) => message._id);
@@ -247,14 +287,14 @@ export const markMessagesAsRead = async (req, res) => {
     if (messageIds.length > 0) {
       await Message.updateMany(
         { _id: { $in: messageIds } },
-        { $addToSet: { readBy: req.user._id } }
+        { $addToSet: { readBy: participantId } }
       );
 
       try {
         const io = getIO();
         io.to(`match:${matchId}`).emit("messagesRead", {
           matchId,
-          userId: req.user._id.toString(),
+          userId: participantId,
           messageIds: messageIds.map((id) => id.toString())
         });
       } catch (socketError) {
@@ -290,7 +330,7 @@ export const toggleMessageReaction = async (req, res) => {
     }
 
     const match = await Match.findById(message.match);
-    if (!isParticipant(match, req.user._id)) {
+    if (!isParticipant(match, req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 

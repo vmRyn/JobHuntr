@@ -7,8 +7,13 @@ import ChatWindow from "../components/ChatWindow";
 import InterviewScheduler from "../components/InterviewScheduler";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MatchList from "../components/MatchList";
+import OfferWorkflowPanel from "../components/OfferWorkflowPanel";
 import PipelineBoard from "../components/PipelineBoard";
 import ProfileStrengthCard from "../components/ProfileStrengthCard";
+import AccountSecurityPanel from "../components/AccountSecurityPanel";
+import CompanyTeamPanel from "../components/CompanyTeamPanel";
+import NotificationCenterPanel from "../components/NotificationCenterPanel";
+import SupportCenterPanel from "../components/SupportCenterPanel";
 import SwipeCard from "../components/SwipeCard";
 import jobIndustryOptions from "../data/jobIndustryOptions";
 import Button from "../components/ui/Button";
@@ -47,6 +52,10 @@ const createInitialProfile = (user) => ({
   companyName: user?.companyProfile?.companyName || "",
   description: user?.companyProfile?.description || "",
   industry: user?.companyProfile?.industry || "",
+  website: user?.companyProfile?.website || "",
+  proofDocuments: Array.isArray(user?.companyProfile?.proofDocuments)
+    ? user.companyProfile.proofDocuments.join("\n")
+    : "",
   linkedinUrl: user?.companyProfile?.linkedinUrl || "",
   logo: user?.companyProfile?.logo || ""
 });
@@ -617,6 +626,8 @@ const CompanyDashboard = () => {
       formData.append("description", profileForm.description);
       formData.append("industry", profileForm.industry);
       formData.append("linkedinUrl", profileForm.linkedinUrl);
+      formData.append("website", profileForm.website);
+      formData.append("proofDocuments", profileForm.proofDocuments);
 
       if (profileFiles.logo) {
         formData.append("logo", profileFiles.logo);
@@ -1031,8 +1042,15 @@ const CompanyDashboard = () => {
         selectedMatch={selectedMatch}
         onNotice={setNotice}
         onError={setError}
-        canSchedule={user.userType === "company"}
+        canSchedule={user.userType === "company" && (user.companyAccess?.role || "owner") !== "viewer"}
         allowAttachToConversation={user.userType === "company"}
+      />
+
+      <OfferWorkflowPanel
+        selectedMatch={selectedMatch}
+        currentUser={user}
+        onNotice={setNotice}
+        onError={setError}
       />
     </div>
   );
@@ -1069,69 +1087,96 @@ const CompanyDashboard = () => {
   );
 
   const renderProfile = () => (
-    <Card className="space-y-5">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
-        <h2 className="font-display text-2xl text-slate-50">Company details</h2>
-      </div>
+    <div className="space-y-3">
+      <Card className="space-y-5">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
+          <h2 className="font-display text-2xl text-slate-50">Company details</h2>
+        </div>
 
-      <ProfileStrengthCard
-        userType={user.userType}
-        companyProfile={profileForm}
-        jobsCount={jobs.length}
-        pendingFiles={{ logo: profileFiles.logo }}
+        <ProfileStrengthCard
+          userType={user.userType}
+          companyProfile={profileForm}
+          jobsCount={jobs.length}
+          pendingFiles={{ logo: profileFiles.logo }}
+        />
+
+        <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
+          <InputField
+            label="Company name"
+            name="companyName"
+            value={profileForm.companyName}
+            onChange={handleProfileChange}
+            placeholder="FutureLabs"
+            required
+          />
+          <InputField
+            label="Industry"
+            name="industry"
+            value={profileForm.industry}
+            onChange={handleProfileChange}
+            placeholder="Software"
+          />
+          <InputField
+            label="LinkedIn page"
+            type="url"
+            name="linkedinUrl"
+            value={profileForm.linkedinUrl}
+            onChange={handleProfileChange}
+            placeholder="https://www.linkedin.com/company/your-company"
+          />
+          <InputField
+            label="Website"
+            type="url"
+            name="website"
+            value={profileForm.website}
+            onChange={handleProfileChange}
+            placeholder="https://yourcompany.com"
+          />
+          <FileUploadField
+            className="md:col-span-2"
+            label="Company logo"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            buttonLabel="Company logo"
+            helpText="Upload JPG, PNG, WEBP, or GIF"
+            file={profileFiles.logo}
+            onFileChange={handleProfileFileChange}
+            existingUrl={profileForm.logo}
+            imagePreview
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Description"
+            name="description"
+            value={profileForm.description}
+            onChange={handleProfileChange}
+            placeholder="What your company is building"
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Proof documents (one URL or note per line)"
+            name="proofDocuments"
+            value={profileForm.proofDocuments}
+            onChange={handleProfileChange}
+            placeholder="Company registration link, compliance docs, etc."
+            rows={4}
+          />
+
+          <Button className="md:col-span-2" type="submit" disabled={savingProfile}>
+            {savingProfile ? "Saving..." : "Save profile"}
+          </Button>
+        </form>
+      </Card>
+
+      <CompanyTeamPanel currentUser={user} />
+      <NotificationCenterPanel
+        disabledReason={profileLocked ? "Complete your profile to access notifications and preferences." : ""}
       />
-
-      <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
-        <InputField
-          label="Company name"
-          name="companyName"
-          value={profileForm.companyName}
-          onChange={handleProfileChange}
-          placeholder="FutureLabs"
-          required
-        />
-        <InputField
-          label="Industry"
-          name="industry"
-          value={profileForm.industry}
-          onChange={handleProfileChange}
-          placeholder="Software"
-        />
-        <InputField
-          label="LinkedIn page"
-          type="url"
-          name="linkedinUrl"
-          value={profileForm.linkedinUrl}
-          onChange={handleProfileChange}
-          placeholder="https://www.linkedin.com/company/your-company"
-        />
-        <FileUploadField
-          className="md:col-span-2"
-          label="Company logo"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          buttonLabel="Company logo"
-          helpText="Upload JPG, PNG, WEBP, or GIF"
-          file={profileFiles.logo}
-          onFileChange={handleProfileFileChange}
-          existingUrl={profileForm.logo}
-          imagePreview
-        />
-        <InputField
-          className="md:col-span-2"
-          as="textarea"
-          label="Description"
-          name="description"
-          value={profileForm.description}
-          onChange={handleProfileChange}
-          placeholder="What your company is building"
-        />
-
-        <Button className="md:col-span-2" type="submit" disabled={savingProfile}>
-          {savingProfile ? "Saving..." : "Save profile"}
-        </Button>
-      </form>
-    </Card>
+      <AccountSecurityPanel user={user} />
+      <SupportCenterPanel />
+    </div>
   );
 
   const contentByTab = {

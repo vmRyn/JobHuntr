@@ -4,16 +4,33 @@ import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import { attachProfileCompletion, getProfileCompletionState } from "../utils/profileCompletion.js";
+import { getCompanyAccountId } from "../utils/companyAccess.js";
 
 let io;
 
 const userProjection =
   "userType seekerProfile.name seekerProfile.profilePicture companyProfile.companyName companyProfile.logo companyProfile.isVerified";
 
-const isParticipant = (match, userId) =>
-  match &&
-  (match.seeker.toString() === userId.toString() ||
-    match.company.toString() === userId.toString());
+const getParticipantId = (user) => {
+  if (!user) {
+    return "";
+  }
+
+  if (user.userType === "company") {
+    return getCompanyAccountId(user);
+  }
+
+  return user._id?.toString?.() || "";
+};
+
+const isParticipant = (match, user) => {
+  const participantId = getParticipantId(user);
+  return (
+    match &&
+    (match.seeker.toString() === participantId ||
+      match.company.toString() === participantId)
+  );
+};
 
 export const setupSocket = (httpServer) => {
   const allowedOrigins = [
@@ -57,7 +74,12 @@ export const setupSocket = (httpServer) => {
 
   io.on("connection", (socket) => {
     const userId = socket.user._id.toString();
+    const participantId = getParticipantId(socket.user);
     socket.join(`user:${userId}`);
+
+    if (participantId && participantId !== userId) {
+      socket.join(`user:${participantId}`);
+    }
 
     socket.on("joinMatch", async (matchId) => {
       if (!matchId) {
@@ -65,7 +87,7 @@ export const setupSocket = (httpServer) => {
       }
 
       const match = await Match.findById(matchId);
-      if (isParticipant(match, userId)) {
+      if (isParticipant(match, socket.user)) {
         socket.join(`match:${matchId}`);
       }
     });
@@ -76,7 +98,7 @@ export const setupSocket = (httpServer) => {
       }
 
       const match = await Match.findById(matchId);
-      if (!isParticipant(match, userId)) {
+      if (!isParticipant(match, socket.user)) {
         return;
       }
 
@@ -93,7 +115,7 @@ export const setupSocket = (httpServer) => {
       }
 
       const match = await Match.findById(matchId);
-      if (!isParticipant(match, userId)) {
+      if (!isParticipant(match, socket.user)) {
         return;
       }
 
@@ -114,17 +136,19 @@ export const setupSocket = (httpServer) => {
         }
 
         const match = await Match.findById(matchId);
-        if (!isParticipant(match, userId)) {
+        if (!isParticipant(match, socket.user)) {
           if (callback) callback({ ok: false, error: "Forbidden" });
           return;
         }
 
+        const senderId = participantId || userId;
+
         const message = await Message.create({
           match: matchId,
-          sender: userId,
+          sender: senderId,
           receiver: receiverId,
           text: text.trim(),
-          readBy: [userId]
+          readBy: [senderId]
         });
 
         const populatedMessage = await Message.findById(message._id)

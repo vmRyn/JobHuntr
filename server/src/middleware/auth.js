@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { attachProfileCompletion, getProfileCompletionState } from "../utils/profileCompletion.js";
+import { getCompanyAccountId, getCompanyRole } from "../utils/companyAccess.js";
 
 export const protect = async (req, res, next) => {
   try {
@@ -27,6 +28,14 @@ export const protect = async (req, res, next) => {
     }
 
     req.user = attachProfileCompletion(user);
+
+    if (req.user.userType === "company") {
+      req.companyContext = {
+        companyId: getCompanyAccountId(req.user),
+        role: getCompanyRole(req.user)
+      };
+    }
+
     next();
   } catch (error) {
     return res.status(401).json({ message: "Invalid token" });
@@ -53,4 +62,17 @@ export const requireCompletedProfile = (req, res, next) => {
     message: "Complete your profile before using this feature",
     ...completion
   });
+};
+
+export const requireCompanyRoles = (...roles) => (req, res, next) => {
+  if (req.user?.userType !== "company") {
+    return res.status(403).json({ message: "Company access required" });
+  }
+
+  const role = req.companyContext?.role || "owner";
+  if (!roles.includes(role)) {
+    return res.status(403).json({ message: "Insufficient company permissions" });
+  }
+
+  return next();
 };

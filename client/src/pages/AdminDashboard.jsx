@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import LoadingSpinner from "../components/LoadingSpinner";
+import SupportAdminPanel from "../components/SupportAdminPanel";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import InputField from "../components/ui/InputField";
@@ -1063,114 +1064,118 @@ const AdminDashboard = () => {
   );
 
   const renderSafety = () => (
-    <Card className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2 md:gap-3">
-        <SelectField
-          className="w-full sm:w-56"
-          label="Status"
-          name="status"
-          value={flaggedMessageFilters.status}
-          onChange={handleFlaggedMessageFilterChange}
-          options={flaggedMessageStatusOptions}
-        />
-        <Button size="sm" variant="secondary" onClick={() => loadFlaggedMessages(flaggedMessageFilters)}>
-          Filter
-        </Button>
-      </div>
+    <div className="space-y-3">
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2 md:gap-3">
+          <SelectField
+            className="w-full sm:w-56"
+            label="Status"
+            name="status"
+            value={flaggedMessageFilters.status}
+            onChange={handleFlaggedMessageFilterChange}
+            options={flaggedMessageStatusOptions}
+          />
+          <Button size="sm" variant="secondary" onClick={() => loadFlaggedMessages(flaggedMessageFilters)}>
+            Filter
+          </Button>
+        </div>
 
-      {loadingFlaggedMessages && <LoadingSpinner label="Loading flagged messages" />}
+        {loadingFlaggedMessages && <LoadingSpinner label="Loading flagged messages" />}
 
-      {!loadingFlaggedMessages && !flaggedMessages.length && (
-        <div className="empty-state">No flagged messages found.</div>
-      )}
+        {!loadingFlaggedMessages && !flaggedMessages.length && (
+          <div className="empty-state">No flagged messages found.</div>
+        )}
 
-      {!loadingFlaggedMessages && flaggedMessages.length > 0 && (
-        <div className="space-y-2.5">
-          {flaggedMessages.map((message) => (
-            <div key={message.id} className="surface-subtle p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={moderationChipClass(message.moderationStatus)}>
-                      {(message.moderationStatus || "flagged").toUpperCase()}
-                    </span>
-                    <span className="chip normal-case tracking-normal">Risk {message.riskScore}</span>
-                    <span className="chip normal-case tracking-normal">{message.riskLevel}</span>
+        {!loadingFlaggedMessages && flaggedMessages.length > 0 && (
+          <div className="space-y-2.5">
+            {flaggedMessages.map((message) => (
+              <div key={message.id} className="surface-subtle p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={moderationChipClass(message.moderationStatus)}>
+                        {(message.moderationStatus || "flagged").toUpperCase()}
+                      </span>
+                      <span className="chip normal-case tracking-normal">Risk {message.riskScore}</span>
+                      <span className="chip normal-case tracking-normal">{message.riskLevel}</span>
+                    </div>
+
+                    <p className="text-xs text-slate-300">
+                      Sender: {message.sender?.displayName || "User"} ({message.sender?.email || "Unknown"})
+                    </p>
+                    {message.text && <p className="text-sm text-slate-100">{message.text}</p>}
+                    {!!message.flaggedKeywords?.length && (
+                      <p className="text-xs text-slate-300">
+                        Keywords: {message.flaggedKeywords.join(", ")}
+                      </p>
+                    )}
+                    {!!message.matchedPatterns?.length && (
+                      <p className="text-xs text-slate-300">
+                        Patterns: {message.matchedPatterns.join(", ")}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-400">Sent {formatDateTime(message.createdAt)}</p>
                   </div>
 
-                  <p className="text-xs text-slate-300">
-                    Sender: {message.sender?.displayName || "User"} ({message.sender?.email || "Unknown"})
-                  </p>
-                  {message.text && <p className="text-sm text-slate-100">{message.text}</p>}
-                  {!!message.flaggedKeywords?.length && (
-                    <p className="text-xs text-slate-300">
-                      Keywords: {message.flaggedKeywords.join(", ")}
-                    </p>
-                  )}
-                  {!!message.matchedPatterns?.length && (
-                    <p className="text-xs text-slate-300">
-                      Patterns: {message.matchedPatterns.join(", ")}
-                    </p>
-                  )}
-                  <p className="text-xs text-slate-400">Sent {formatDateTime(message.createdAt)}</p>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleModerateMessage(message, "hide")}
-                    disabled={activeActionId === `message-${message.id}-hide`}
-                  >
-                    Hide
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleModerateMessage(message, "restore")}
-                    disabled={activeActionId === `message-${message.id}-restore`}
-                  >
-                    Restore
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => handleModerateMessage(message, "delete")}
-                    disabled={activeActionId === `message-${message.id}-delete`}
-                  >
-                    Delete
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleModerateMessage(message, "restrict_sender_24h")}
-                    disabled={activeActionId === `message-${message.id}-restrict_sender_24h`}
-                  >
-                    Restrict 24h
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleModerateMessage(message, "restrict_sender_72h")}
-                    disabled={activeActionId === `message-${message.id}-restrict_sender_72h`}
-                  >
-                    Restrict 72h
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleModerateMessage(message, "clear_flags")}
-                    disabled={activeActionId === `message-${message.id}-clear_flags`}
-                  >
-                    Clear flags
-                  </Button>
+                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleModerateMessage(message, "hide")}
+                      disabled={activeActionId === `message-${message.id}-hide`}
+                    >
+                      Hide
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleModerateMessage(message, "restore")}
+                      disabled={activeActionId === `message-${message.id}-restore`}
+                    >
+                      Restore
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => handleModerateMessage(message, "delete")}
+                      disabled={activeActionId === `message-${message.id}-delete`}
+                    >
+                      Delete
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleModerateMessage(message, "restrict_sender_24h")}
+                      disabled={activeActionId === `message-${message.id}-restrict_sender_24h`}
+                    >
+                      Restrict 24h
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleModerateMessage(message, "restrict_sender_72h")}
+                      disabled={activeActionId === `message-${message.id}-restrict_sender_72h`}
+                    >
+                      Restrict 72h
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleModerateMessage(message, "clear_flags")}
+                      disabled={activeActionId === `message-${message.id}-clear_flags`}
+                    >
+                      Clear flags
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <SupportAdminPanel onNotice={setNotice} onError={setError} />
+    </div>
   );
 
   const renderAudit = () => (

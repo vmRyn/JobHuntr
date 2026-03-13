@@ -1,6 +1,13 @@
 import User from "../models/User.js";
 import createToken from "../utils/createToken.js";
 import { attachProfileCompletion } from "../utils/profileCompletion.js";
+import {
+  expiresInMinutes,
+  generateNumericCode,
+  generateToken,
+  hashToken,
+  isExpired
+} from "../utils/securityTokens.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills;
@@ -28,6 +35,65 @@ const parseSkills = (skills) => {
       .filter(Boolean);
   }
   return [];
+};
+
+const isNonProduction = process.env.NODE_ENV !== "production";
+
+const clearRecoveryState = (user) => {
+  user.passwordResetTokenHash = "";
+  user.passwordResetExpiresAt = null;
+};
+
+const clearVerificationState = (user) => {
+  user.emailVerificationTokenHash = "";
+  user.emailVerificationExpiresAt = null;
+};
+
+const clearTwoFactorChallenge = (user) => {
+  user.twoFactorCodeHash = "";
+  user.twoFactorCodeExpiresAt = null;
+  user.twoFactorPendingTokenHash = "";
+  user.twoFactorPendingExpiresAt = null;
+};
+
+const buildAuthSuccessPayload = async (userId) => {
+  const safeUser = await User.findById(userId).select("-password");
+
+  return {
+    token: createToken(safeUser),
+    user: attachProfileCompletion(safeUser)
+  };
+};
+
+const issueEmailVerificationToken = (user) => {
+  const verificationToken = generateToken(24);
+  user.emailVerificationTokenHash = hashToken(verificationToken);
+  user.emailVerificationExpiresAt = expiresInMinutes(24 * 60);
+
+  return verificationToken;
+};
+
+const issuePasswordResetToken = (user) => {
+  const resetToken = generateToken(24);
+  user.passwordResetTokenHash = hashToken(resetToken);
+  user.passwordResetExpiresAt = expiresInMinutes(30);
+
+  return resetToken;
+};
+
+const issueTwoFactorChallenge = (user) => {
+  const challengeCode = generateNumericCode(6);
+  const pendingToken = generateToken(24);
+
+  user.twoFactorCodeHash = hashToken(challengeCode);
+  user.twoFactorCodeExpiresAt = expiresInMinutes(10);
+  user.twoFactorPendingTokenHash = hashToken(pendingToken);
+  user.twoFactorPendingExpiresAt = expiresInMinutes(10);
+
+  return {
+    challengeCode,
+    pendingToken
+  };
 };
 
 export const register = async (req, res) => {
@@ -65,7 +131,8 @@ export const register = async (req, res) => {
     const payload = {
       userType,
       email: email.toLowerCase(),
-      password
+      password,
+      isEmailVerified: false
     };
 
     if (userType === "seeker") {
@@ -87,14 +154,27 @@ export const register = async (req, res) => {
         industry: industry || "",
         logo: logo || ""
       };
+
+      payload.companyAccess = {
+        companyAccount: null,
+        role: "owner"
+      };
     }
 
     const user = await User.create(payload);
-    const safeUser = await User.findById(user._id).select("-password");
+    const verificationToken = issueEmailVerificationToken(user);
+    await user.save();
+
+    const authPayload = await buildAuthSuccessPayload(user._id);
 
     return res.status(201).json({
-      token: createToken(user),
-      user: attachProfileCompletion(safeUser)
+      ...authPayload,
+      emailVerificationRequired: true,
+      ...(isNonProduction
+        ? {
+            emailVerificationPreviewToken: verificationToken
+          }
+        : {})
     });
   } catch (error) {
     return res.status(500).json({ message: "Registration failed" });
@@ -109,7 +189,9 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      "+password +twoFactorCodeHash +twoFactorCodeExpiresAt +twoFactorPendingTokenHash +twoFactorPendingExpiresAt"
+    );
 
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -129,14 +211,293 @@ export const login = async (req, res) => {
       });
     }
 
-    const safeUser = await User.findById(user._id).select("-password");
+    if (user.twoFactorEnabled) {
+      const { challengeCode, pendingToken } = issueTwoFactorChallenge(user);
+      await user.save();
 
-    return res.json({
-      token: createToken(user),
-      user: attachProfileCompletion(safeUser)
-    });
+      return res.status(202).json({
+        requiresTwoFactor: true,
+        twoFactorPendingToken: pendingToken,
+        message: "Two-factor authentication required",
+        ...(isNonProduction
+          ? {
+              twoFactorPreviewCode: challengeCode
+            }
+          : {})
+      });
+    }
+
+    const authPayload = await buildAuthSuccessPayload(user._id);
+
+    return res.json(authPayload);
   } catch (error) {
     return res.status(500).json({ message: "Login failed" });
+  }
+};
+
+export const verifyLoginTwoFactor = async (req, res) => {
+  try {
+    const pendingToken = String(req.body?.pendingToken || "").trim();
+    const code = String(req.body?.code || "").trim();
+
+    if (!pendingToken || !code) {
+      return res.status(400).json({ message: "pendingToken and code are required" });
+    }
+
+    const user = await User.findOne({
+      twoFactorPendingTokenHash: hashToken(pendingToken)
+    }).select(
+      "+twoFactorCodeHash +twoFactorCodeExpiresAt +twoFactorPendingTokenHash +twoFactorPendingExpiresAt"
+    );
+
+    if (!user || isExpired(user.twoFactorPendingExpiresAt) || isExpired(user.twoFactorCodeExpiresAt)) {
+      return res.status(401).json({ message: "Two-factor challenge expired" });
+    }
+
+    if (hashToken(code) !== user.twoFactorCodeHash) {
+      return res.status(401).json({ message: "Invalid two-factor code" });
+    }
+
+    clearTwoFactorChallenge(user);
+    await user.save();
+
+    const authPayload = await buildAuthSuccessPayload(user._id);
+
+    return res.json(authPayload);
+  } catch (error) {
+    return res.status(500).json({ message: "Two-factor verification failed" });
+  }
+};
+
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email }).select(
+      "+passwordResetTokenHash +passwordResetExpiresAt"
+    );
+
+    let resetToken = "";
+    if (user) {
+      resetToken = issuePasswordResetToken(user);
+      await user.save();
+    }
+
+    return res.json({
+      message: "If an account exists for that email, a reset link has been created.",
+      ...(isNonProduction && user
+        ? {
+            passwordResetPreviewToken: resetToken
+          }
+        : {})
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not start password reset" });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    const newPassword = String(req.body?.newPassword || "").trim();
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "token and newPassword are required" });
+    }
+
+    const user = await User.findOne({
+      passwordResetTokenHash: hashToken(token)
+    }).select("+passwordResetTokenHash +passwordResetExpiresAt +password");
+
+    if (!user || isExpired(user.passwordResetExpiresAt)) {
+      return res.status(400).json({ message: "Password reset token is invalid or expired" });
+    }
+
+    user.password = newPassword;
+    user.lastPasswordChangedAt = new Date();
+    clearRecoveryState(user);
+    clearTwoFactorChallenge(user);
+    await user.save();
+
+    return res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not reset password" });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "currentPassword and newPassword are required" });
+    }
+
+    const user = await User.findById(req.user._id).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+
+    user.password = newPassword;
+    user.lastPasswordChangedAt = new Date();
+    clearRecoveryState(user);
+    await user.save();
+
+    return res.json({ message: "Password changed successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not change password" });
+  }
+};
+
+export const requestEmailVerification = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "+emailVerificationTokenHash +emailVerificationExpiresAt isEmailVerified"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isEmailVerified) {
+      return res.json({ message: "Email is already verified" });
+    }
+
+    const verificationToken = issueEmailVerificationToken(user);
+    await user.save();
+
+    return res.json({
+      message: "Verification token generated",
+      ...(isNonProduction
+        ? {
+            emailVerificationPreviewToken: verificationToken
+          }
+        : {})
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not request email verification" });
+  }
+};
+
+export const confirmEmailVerification = async (req, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!token) {
+      return res.status(400).json({ message: "Verification token is required" });
+    }
+
+    const user = await User.findOne({
+      emailVerificationTokenHash: hashToken(token)
+    }).select("+emailVerificationTokenHash +emailVerificationExpiresAt isEmailVerified");
+
+    if (!user || isExpired(user.emailVerificationExpiresAt)) {
+      return res.status(400).json({ message: "Verification token is invalid or expired" });
+    }
+
+    user.isEmailVerified = true;
+    clearVerificationState(user);
+    await user.save();
+
+    return res.json({ message: "Email verified successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not verify email" });
+  }
+};
+
+export const requestTwoFactorSetup = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "+twoFactorCodeHash +twoFactorCodeExpiresAt"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const challengeCode = generateNumericCode(6);
+    user.twoFactorCodeHash = hashToken(challengeCode);
+    user.twoFactorCodeExpiresAt = expiresInMinutes(10);
+    await user.save();
+
+    return res.json({
+      message: "Two-factor setup code generated",
+      ...(isNonProduction
+        ? {
+            twoFactorPreviewCode: challengeCode
+          }
+        : {})
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not request two-factor setup" });
+  }
+};
+
+export const enableTwoFactor = async (req, res) => {
+  try {
+    const code = String(req.body?.code || "").trim();
+    if (!code) {
+      return res.status(400).json({ message: "Setup code is required" });
+    }
+
+    const user = await User.findById(req.user._id).select(
+      "+twoFactorCodeHash +twoFactorCodeExpiresAt"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (isExpired(user.twoFactorCodeExpiresAt) || hashToken(code) !== user.twoFactorCodeHash) {
+      return res.status(400).json({ message: "Setup code is invalid or expired" });
+    }
+
+    user.twoFactorEnabled = true;
+    clearTwoFactorChallenge(user);
+    await user.save();
+
+    return res.json({ message: "Two-factor authentication enabled" });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not enable two-factor authentication" });
+  }
+};
+
+export const disableTwoFactor = async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || "");
+
+    if (!currentPassword) {
+      return res.status(400).json({ message: "currentPassword is required" });
+    }
+
+    const user = await User.findById(req.user._id).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+
+    user.twoFactorEnabled = false;
+    clearTwoFactorChallenge(user);
+    await user.save();
+
+    return res.json({ message: "Two-factor authentication disabled" });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not disable two-factor authentication" });
   }
 };
 

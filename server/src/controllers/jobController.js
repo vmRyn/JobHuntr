@@ -13,6 +13,12 @@ import {
   normalizePostcode,
   radiusToMeters
 } from "../utils/postcodeGeocoding.js";
+import {
+  canManageJobs,
+  canViewCompanyData,
+  getCompanyAccountId,
+  getCompanyRole
+} from "../utils/companyAccess.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills;
@@ -193,7 +199,14 @@ export const getCompanyJobs = async (req, res) => {
       return res.status(403).json({ message: "Only companies can access this route" });
     }
 
-    const jobs = await Job.find({ company: req.user._id }).sort({ createdAt: -1 });
+    const role = getCompanyRole(req.user);
+    if (!canViewCompanyData(role)) {
+      return res.status(403).json({ message: "Insufficient company permissions" });
+    }
+
+    const companyId = getCompanyAccountId(req.user);
+
+    const jobs = await Job.find({ company: companyId }).sort({ createdAt: -1 });
     return res.json(jobs);
   } catch (error) {
     return res.status(500).json({ message: "Failed to load jobs" });
@@ -218,7 +231,10 @@ export const getJobById = async (req, res) => {
       return res.status(404).json({ message: "Job not found" });
     }
 
-    if (req.user.userType === "company" && String(job.company?._id || job.company) !== String(req.user._id)) {
+    if (
+      req.user.userType === "company" &&
+      String(job.company?._id || job.company) !== getCompanyAccountId(req.user)
+    ) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -233,6 +249,13 @@ export const createJob = async (req, res) => {
     if (req.user.userType !== "company") {
       return res.status(403).json({ message: "Only companies can create jobs" });
     }
+
+    const role = getCompanyRole(req.user);
+    if (!canManageJobs(role)) {
+      return res.status(403).json({ message: "Only owners and recruiters can create jobs" });
+    }
+
+    const companyId = getCompanyAccountId(req.user);
 
     const { title, description, salary, location, postcode, requiredSkills, industry } = req.body;
 
@@ -253,14 +276,14 @@ export const createJob = async (req, res) => {
     }
 
     const parsedRequiredSkills = parseSkills(requiredSkills);
-    const company = await User.findById(req.user._id).select("companyProfile createdAt moderation");
+    const company = await User.findById(companyId).select("companyProfile createdAt moderation");
     const jobsCreatedLast24h = await Job.countDocuments({
-      company: req.user._id,
+      company: companyId,
       createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     });
 
     const existingJobs = await Job.find({
-      company: req.user._id,
+      company: companyId,
       title: new RegExp(`^${escapeRegExp(title.trim())}$`, "i")
     })
       .sort({ createdAt: -1 })
@@ -297,7 +320,7 @@ export const createJob = async (req, res) => {
     });
 
     const job = await Job.create({
-      company: req.user._id,
+      company: companyId,
       title,
       description,
       salary: salary || "",
@@ -316,12 +339,12 @@ export const createJob = async (req, res) => {
       }
     });
 
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(companyId, {
       $addToSet: { jobListings: job._id }
     });
 
     if (companyRisk.riskScore > 0) {
-      await User.findByIdAndUpdate(req.user._id, {
+      await User.findByIdAndUpdate(companyId, {
         $inc: {
           "moderation.suspiciousCompanyScore": Math.max(1, Math.round(companyRisk.riskScore / 5))
         },
@@ -338,7 +361,7 @@ export const createJob = async (req, res) => {
         sourceType: "automation",
         targetType: "job",
         targetJob: job._id,
-        targetUser: req.user._id,
+        targetUser: companyId,
         reasonCategory: duplicateJob
           ? "duplicate"
           : moderationDecision.flags.includes("misleading_language")
@@ -357,7 +380,7 @@ export const createJob = async (req, res) => {
       await Report.create({
         sourceType: "automation",
         targetType: "company",
-        targetUser: req.user._id,
+        targetUser: companyId,
         reasonCategory: "other",
         details: "Automated company risk alert triggered due to posting behavior and profile quality.",
         priority: companyRisk.riskScore >= 70 ? "critical" : "high",
@@ -377,7 +400,14 @@ export const updateJob = async (req, res) => {
       return res.status(403).json({ message: "Only companies can update jobs" });
     }
 
-    const job = await Job.findOne({ _id: req.params.id, company: req.user._id });
+    const role = getCompanyRole(req.user);
+    if (!canManageJobs(role)) {
+      return res.status(403).json({ message: "Only owners and recruiters can update jobs" });
+    }
+
+    const companyId = getCompanyAccountId(req.user);
+
+    const job = await Job.findOne({ _id: req.params.id, company: companyId });
 
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
@@ -411,9 +441,9 @@ export const updateJob = async (req, res) => {
 
     if (requiredSkills !== undefined) job.requiredSkills = parseSkills(requiredSkills);
 
-    const company = await User.findById(req.user._id).select("companyProfile createdAt moderation");
+    const company = await User.findById(companyId).select("companyProfile createdAt moderation");
     const jobsCreatedLast24h = await Job.countDocuments({
-      company: req.user._id,
+      company: companyId,
       createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     });
 
@@ -432,7 +462,7 @@ export const updateJob = async (req, res) => {
     });
 
     const existingJobs = await Job.find({
-      company: req.user._id,
+      company: companyId,
       _id: { $ne: job._id },
       title: new RegExp(`^${escapeRegExp(job.title.trim())}$`, "i")
     })
@@ -482,7 +512,7 @@ export const updateJob = async (req, res) => {
         sourceType: "automation",
         targetType: "job",
         targetJob: job._id,
-        targetUser: req.user._id,
+        targetUser: companyId,
         reasonCategory: duplicateJob
           ? "duplicate"
           : moderationDecision.flags.includes("misleading_language")
@@ -498,7 +528,7 @@ export const updateJob = async (req, res) => {
     }
 
     if (companyRisk.highRisk) {
-      await User.findByIdAndUpdate(req.user._id, {
+      await User.findByIdAndUpdate(companyId, {
         $inc: {
           "moderation.suspiciousCompanyScore": Math.max(1, Math.round(companyRisk.riskScore / 5))
         },
@@ -512,7 +542,7 @@ export const updateJob = async (req, res) => {
       await Report.create({
         sourceType: "automation",
         targetType: "company",
-        targetUser: req.user._id,
+        targetUser: companyId,
         reasonCategory: "other",
         details: "Automated company risk alert triggered on job update.",
         priority: companyRisk.riskScore >= 70 ? "critical" : "high",
@@ -532,13 +562,20 @@ export const deleteJob = async (req, res) => {
       return res.status(403).json({ message: "Only companies can delete jobs" });
     }
 
-    const job = await Job.findOneAndDelete({ _id: req.params.id, company: req.user._id });
+    const role = getCompanyRole(req.user);
+    if (!canManageJobs(role)) {
+      return res.status(403).json({ message: "Only owners and recruiters can delete jobs" });
+    }
+
+    const companyId = getCompanyAccountId(req.user);
+
+    const job = await Job.findOneAndDelete({ _id: req.params.id, company: companyId });
 
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
     }
 
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(companyId, {
       $pull: { jobListings: job._id }
     });
 

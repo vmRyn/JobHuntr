@@ -13,6 +13,8 @@ import savedRoutes from "./routes/savedRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import appealRoutes from "./routes/appealRoutes.js";
+import supportRoutes from "./routes/supportRoutes.js";
+import companyTeamRoutes from "./routes/companyTeamRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -47,6 +49,8 @@ app.use("/api/saved", savedRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/appeals", appealRoutes);
+app.use("/api/support", supportRoutes);
+app.use("/api/company-team", companyTeamRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -1,48 +1,79 @@
 # JobHuntr
 
-JobHuntr is a swipe-first hiring platform inspired by Tinder-style interactions.
+JobHuntr is a swipe-first hiring platform where:
 
 - Seekers swipe through jobs
 - Companies swipe through candidates
-- Mutual right swipes create matches and unlock chat
+- Mutual right swipes create matches and unlock real-time chat
 
-## App Previews
+## Screenshot Gallery
 
-| Discover | Matches | Messages |
+### Public Pages
+
+| Landing | Login | Sign Up |
 | --- | --- | --- |
-| ![Discover Preview](img/1.png) | ![Matches Preview](img/2.png) | ![Messages Preview](img/3.png) |
+| ![Landing Page](img/LandingPage.png) | ![Login Page](img/LogInPage.png) | ![Sign Up Page](img/SignUpPage.png) |
+
+### Seeker Dashboard
+
+| Discover | Saved | Matches | Messages | Profile |
+| --- | --- | --- | --- | --- |
+| ![Seeker Discover](img/SeekerDiscover.png) | ![Seeker Saved](img/SeekerSaved.png) | ![Seeker Matches](img/SeekerMatches.png) | ![Seeker Messages](img/SeekerMessages.png) | ![Seeker Profile](img/SeekerProfile.png) |
+
+### Company Dashboard
+
+| Discover | Jobs | Saved |
+| --- | --- | --- |
+| ![Company Discover](img/CompanyDiscover.png) | ![Company Jobs](img/CompanyJobs.png) | ![Company Saved](img/CompanySaved.png) |
+
+| Matches | Messages | Profile |
+| --- | --- | --- |
+| ![Company Matches](img/CompanyMatches.png) | ![Company Messages](img/CompanyMessages.png) | ![Company Profile](img/CompanyProfile.png) |
 
 ## Product Highlights
 
-### Core Flow
-- Swipe-first discovery for both seekers and companies
+### Core Experience
+
+- Swipe-first discovery for seekers and companies
 - Two-sided matching logic with role-aware behavior
-- Real-time messaging for matched users using Socket.io
+- Real-time chat with read receipts, reactions, and attachments
+- Saved jobs/candidates workflow
 
-### UI and UX
-- Modern dark theme with mobile-first layout
-- Bottom navigation and tabbed sections (Discover, Matches, Messages, Profile)
-- Card-based interaction model with animated swipe gestures
-- Reusable design system components for consistency (buttons, cards, tabs, inputs, modal sheets)
+### Account Security and Trust
 
-### Profile and Hiring Features
-- Seeker profile picture upload
-- Company logo upload
-- CV upload, view, and download support
-- Skills as tag input
-- Location autocomplete
-- Industry/Field profile metadata
-- Company job CRUD with required industry and postcode
-- Postcode radius and industry filters for seeker discovery
-- Admin moderation dashboard with company verification and job controls
-- Verified company badge for trusted employers in seeker-facing views
-- Reports and appeals workflow (jobs, companies, messages)
-- Message safety automation with scam signal detection and temporary chat restrictions
-- Job quality moderation with pending review and duplicate detection safeguards
+- Forgot-password and reset-password token flows
+- Email verification request and confirmation
+- Change password while authenticated
+- Optional two-factor authentication for login
+- Moderation notifications for suspensions, appeal outcomes, and message actions
+
+### Hiring Workflow
+
+- Interview scheduling with timezone/location/notes
+- Interview responses by both sides: accept, decline, reschedule
+- Offer lifecycle: create, update, withdraw, accept/decline
+- Offer-level audit trail embedded per match
+- Pipeline stage tracking (new, screening, interview, offer)
+
+### Company Team Collaboration
+
+- Invite-based team onboarding
+- Company roles: owner, recruiter, viewer
+- Role-based write permissions across jobs, interviews, offers, and profile management
+- Shared company participant context for matches/messages/realtime rooms
+
+### Notifications, Support, and Moderation
+
+- Notification center with per-event channel preferences (in-app/email/push)
+- AI support assistant + ticket escalation to admins
+- Admin support queue with replies and status updates
+- Reports and appeals workflow
+- Admin control center for trust and safety operations
 
 ## Tech Stack
 
 ### Frontend
+
 - React 18 + Vite
 - TailwindCSS
 - React Router
@@ -51,83 +82,88 @@ JobHuntr is a swipe-first hiring platform inspired by Tinder-style interactions.
 - Socket.io client
 
 ### Backend
+
 - Node.js + Express
 - MongoDB + Mongoose
 - JWT auth + bcryptjs
 - Socket.io
 - Multer (multipart uploads)
 
-## Project Structure
+### Public Read-Only API Service
 
-```
+- Separate Express service under `public-api/`
+- Read-only endpoints for public jobs, companies, and stats
+
+## Monorepo Structure
+
+```text
 JobHuntr/
-   client/
-      src/
-         api/
-         components/
-         context/
-         data/
-         pages/
-         utils/
-   server/
-      src/
-         config/
-         controllers/
-         middleware/
-         models/
-         routes/
-         utils/
-      uploads/
+  client/
+    src/
+      api/
+      components/
+      context/
+      data/
+      pages/
+      utils/
+  server/
+    src/
+      config/
+      controllers/
+      middleware/
+      models/
+      routes/
+      scripts/
+      utils/
+  public-api/
+    src/
+  img/
 ```
 
 ## Prerequisites
 
 - Node.js 18+
-- MongoDB running locally (default: mongodb://127.0.0.1:27017)
+- MongoDB running locally (default: `mongodb://127.0.0.1:27017`)
 
 ## Quick Start
 
-### 1) Backend
+### 1) Backend API (`server`)
 
-1. Open a terminal in server
-2. Install dependencies
+```bash
+cd server
+npm install
+cp .env.example .env
+npm run dev
+```
 
-    ```bash
-    npm install
-    ```
+### 2) Frontend App (`client`)
 
-3. Create server/.env from server/.env.example
-4. Start the API server
+```bash
+cd client
+npm install
+cp .env.example .env
+npm run dev
+```
 
-    ```bash
-    npm run dev
-    ```
+### 3) Optional Public API (`public-api`)
 
-### 2) Frontend
+```bash
+cd public-api
+npm install
+cp .env.example .env
+npm run dev
+```
 
-1. Open a second terminal in client
-2. Install dependencies
+### Local URLs
 
-    ```bash
-    npm install
-    ```
-
-3. Create client/.env from client/.env.example
-4. Start the frontend app
-
-    ```bash
-    npm run dev
-    ```
-
-### Default Local URLs
-
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:5000
-- Health check: http://localhost:5000/api/health
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:5000`
+- Backend health: `http://localhost:5000/api/health`
+- Public API base: `http://localhost:5100/api/public`
 
 ## Environment Variables
 
-### server/.env
+### `server/.env`
 
 | Variable | Required | Example | Notes |
 | --- | --- | --- | --- |
@@ -136,127 +172,208 @@ JobHuntr/
 | JWT_SECRET | Yes | replace_with_a_strong_secret | JWT signing secret |
 | CLIENT_URL | Yes | http://localhost:5173 | CORS allowlist origin |
 
-### client/.env
+### `client/.env`
 
 | Variable | Required | Example | Notes |
 | --- | --- | --- | --- |
 | VITE_API_URL | Yes | http://localhost:5000/api | REST API base URL |
 | VITE_SOCKET_URL | Yes | http://localhost:5000 | Socket.io server base URL |
 
+### `public-api/.env`
+
+See `public-api/README.md` for full config details (including API-key and rate-limit options).
+
 ## Scripts
 
-### server
-- npm run dev: Start backend with nodemon
-- npm start: Start backend with node
-- npm run seed:demo: Seed demo companies, seekers, jobs, and matches
-- npm run admin:create: Create or update an admin account using ADMIN_EMAIL and ADMIN_PASSWORD
+### `server`
 
-### client
-- npm run dev: Start Vite dev server
-- npm run build: Build production bundle
-- npm run preview: Preview production build
+- `npm run dev`: start backend with nodemon
+- `npm start`: start backend with node
+- `npm run seed:demo`: seed demo users/jobs/matches
+- `npm run admin:create`: create/update admin user
+
+### `client`
+
+- `npm run dev`: start Vite dev server
+- `npm run build`: build production bundle
+- `npm run preview`: preview production build
+
+### `public-api`
+
+- `npm run dev`: start public API with nodemon
+- `npm start`: start public API with node
+- `npm run check`: run node syntax check for `src/server.js`
 
 ## API Overview
 
-Base path: /api
+Base path: `/api`
 
-- Auth
-   - POST /auth/register
-   - POST /auth/login
-   - GET /auth/me
-- Profile
-   - GET /profile/me
-   - PUT /profile/me
-   - GET /profile/candidates
-- Jobs
-   - GET /jobs
-   - GET /jobs/company
-   - GET /jobs/:id
-   - POST /jobs
-   - PUT /jobs/:id
-   - DELETE /jobs/:id
-- Swipes
-   - POST /swipes/job/:jobId
-   - POST /swipes/candidate/:candidateId
-- Matches
-   - GET /matches
-   - GET /matches/:matchId/candidate-profile
-   - GET /matches/:matchId/interviews
-   - POST /matches/:matchId/interviews (company only)
-   - PATCH /matches/:matchId/interviews/:interviewId (company only)
-- Messages
-   - GET /messages/:matchId
-   - POST /messages/:matchId
-- Notifications
-   - GET /notifications
-   - PATCH /notifications/:notificationId/read
-   - PATCH /notifications/read-all
-- Reports
-   - POST /reports
-   - GET /reports/me
-- Appeals
-   - POST /appeals
-   - POST /appeals/me
-- Admin (admin role only)
-   - GET /admin/overview
-   - GET /admin/companies
-   - PATCH /admin/companies/:companyId/verification
-   - PATCH /admin/users/:userId/suspension
-   - GET /admin/jobs
-   - PATCH /admin/jobs/:jobId/status
-   - PATCH /admin/jobs/:jobId/moderation
-   - GET /admin/reports
-   - PATCH /admin/reports/:reportId
-   - GET /admin/appeals
-   - PATCH /admin/appeals/:appealId
-   - GET /admin/messages/flagged
-   - PATCH /admin/messages/:messageId/moderation
-   - GET /admin/audit-logs
+### Auth
 
-See API_EXAMPLES.md for request examples.
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/login/2fa`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /auth/verify-email`
+- `GET /auth/me`
+- `POST /auth/change-password`
+- `POST /auth/verify-email/request`
+- `POST /auth/2fa/request`
+- `POST /auth/2fa/enable`
+- `POST /auth/2fa/disable`
+
+### Profile
+
+- `GET /profile/me`
+- `PUT /profile/me`
+- `GET /profile/candidates`
+
+### Jobs
+
+- `GET /jobs`
+- `GET /jobs/company`
+- `GET /jobs/:id`
+- `POST /jobs`
+- `PUT /jobs/:id`
+- `DELETE /jobs/:id`
+
+### Swipes
+
+- `POST /swipes/job/:jobId`
+- `POST /swipes/candidate/:candidateId`
+
+### Matches and Interviews
+
+- `GET /matches`
+- `GET /matches/:matchId/candidate-profile`
+- `PATCH /matches/:matchId/stage`
+- `GET /matches/:matchId/interviews`
+- `POST /matches/:matchId/interviews`
+- `PATCH /matches/:matchId/interviews/:interviewId`
+- `POST /matches/:matchId/interviews/:interviewId/respond`
+
+### Offers
+
+- `GET /matches/:matchId/offers`
+- `POST /matches/:matchId/offers`
+- `PATCH /matches/:matchId/offers/:offerId`
+- `PATCH /matches/:matchId/offers/:offerId/respond`
+
+### Messages
+
+- `GET /messages/:matchId`
+- `POST /messages/:matchId`
+- `POST /messages/:matchId/read`
+- `POST /messages/:messageId/reactions`
+
+### Notifications
+
+- `GET /notifications`
+- `GET /notifications/preferences`
+- `PUT /notifications/preferences`
+- `PATCH /notifications/read-all`
+- `PATCH /notifications/:notificationId/read`
+
+### Saved Items
+
+- `GET /saved`
+- `POST /saved/job/:jobId`
+- `POST /saved/candidate/:candidateId`
+- `DELETE /saved/:savedItemId`
+
+### Reports and Appeals
+
+- `POST /reports`
+- `GET /reports/me`
+- `POST /appeals`
+- `POST /appeals/me`
+
+### Support
+
+- `POST /support/chatbot`
+- `GET /support/tickets`
+- `POST /support/tickets`
+- `GET /support/tickets/:ticketId`
+- `POST /support/tickets/:ticketId/messages`
+- `GET /support/admin/tickets`
+- `GET /support/admin/tickets/:ticketId`
+- `POST /support/admin/tickets/:ticketId/reply`
+- `PATCH /support/admin/tickets/:ticketId/status`
+
+### Company Team
+
+- `POST /company-team/invites/accept`
+- `GET /company-team/members`
+- `GET /company-team/invites`
+- `POST /company-team/invites`
+- `PATCH /company-team/invites/:inviteId/revoke`
+- `PATCH /company-team/members/:memberId/role`
+- `DELETE /company-team/members/:memberId`
+
+### Admin (admin role)
+
+- `GET /admin/overview`
+- `GET /admin/companies`
+- `PATCH /admin/companies/:companyId/verification`
+- `PATCH /admin/users/:userId/suspension`
+- `GET /admin/jobs`
+- `PATCH /admin/jobs/:jobId/status`
+- `PATCH /admin/jobs/:jobId/moderation`
+- `GET /admin/reports`
+- `PATCH /admin/reports/:reportId`
+- `GET /admin/appeals`
+- `PATCH /admin/appeals/:appealId`
+- `GET /admin/messages/flagged`
+- `PATCH /admin/messages/:messageId/moderation`
+- `GET /admin/audit-logs`
+
+See `API_EXAMPLES.md` for request/response examples.
 
 ## Uploads
 
-- Uploaded assets are stored in server/uploads and served from /uploads
-- Typical assets include profile pictures, company logos, and CV files
+- Uploaded assets are stored in `server/uploads`
+- Uploaded files are served from `/uploads`
+- Typical assets: profile images, company logos, CV/resume files
 
 ## Troubleshooting
 
 - Backend does not start
-   - Verify MongoDB is running
-   - Verify MONGO_URI in server/.env
-- Registration/login issues
-   - Verify CLIENT_URL in server/.env matches frontend origin
-   - Ensure frontend env points to the correct backend URL
-- Empty discovery results
-   - Ensure company jobs include postcode and industry
-   - Try broadening radius/industry filters
+  - Verify MongoDB is running
+  - Verify `MONGO_URI` in `server/.env`
+- Login, reset, or verify-email issues
+  - Verify `CLIENT_URL` in `server/.env`
+  - Verify `VITE_API_URL` and `VITE_SOCKET_URL` in `client/.env`
+- Empty discovery queues
+  - Ensure company jobs include postcode and industry
+  - Broaden radius and industry filters
 
 ## Demo Seed Data
 
-Run the seed script from the server directory:
+Run from the `server` directory:
 
 ```bash
 npm run seed:demo
 ```
 
-This creates:
+This seeds:
+
 - 1 demo admin account
 - 4 demo company accounts
 - 3 demo seeker accounts
 - 12 demo jobs (3 per company)
-- demo matches and swipe records for interview scheduling tests
+- sample swipes, matches, and interview test data
 
-Admins are provisioned by seed/script and cannot be created through the public signup flow.
+Admins are created by seed/scripts and are not available through public sign up.
 
-### Demo Admin Credentials
+### Demo Admin
 
-- Demo Admin: `admin@demo.jobhuntr.local`
+- Email: `admin@demo.jobhuntr.local`
 - Password: `DemoAdmin123!`
 
-### Demo Company Credentials
+### Demo Companies
 
-All demo companies use the same password: `DemoCompany123!`
+All demo companies use password: `DemoCompany123!`
 
 - Northstar Labs: `northstar.talent@demo.jobhuntr.local`
 - PixelForge Studio: `pixelforge.hiring@demo.jobhuntr.local`

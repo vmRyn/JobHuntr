@@ -3,11 +3,79 @@ import bcrypt from "bcryptjs";
 
 const { Schema } = mongoose;
 
+const notificationChannelSchema = new Schema(
+  {
+    interviewUpdates: { type: Boolean, default: true },
+    messages: { type: Boolean, default: true },
+    matches: { type: Boolean, default: true },
+    moderation: { type: Boolean, default: true },
+    offers: { type: Boolean, default: true },
+    support: { type: Boolean, default: true },
+    system: { type: Boolean, default: true }
+  },
+  { _id: false }
+);
+
+const notificationPreferencesSchema = new Schema(
+  {
+    inApp: {
+      type: notificationChannelSchema,
+      default: () => ({})
+    },
+    email: {
+      type: notificationChannelSchema,
+      default: () => ({
+        interviewUpdates: false,
+        messages: false,
+        matches: false,
+        moderation: true,
+        offers: true,
+        support: true,
+        system: true
+      })
+    },
+    push: {
+      type: notificationChannelSchema,
+      default: () => ({
+        interviewUpdates: false,
+        messages: false,
+        matches: false,
+        moderation: false,
+        offers: false,
+        support: false,
+        system: false
+      })
+    }
+  },
+  { _id: false }
+);
+
+const companyAccessSchema = new Schema(
+  {
+    companyAccount: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    role: {
+      type: String,
+      enum: ["owner", "recruiter", "viewer"],
+      default: "owner"
+    }
+  },
+  { _id: false }
+);
+
 const seekerProfileSchema = new Schema(
   {
     name: { type: String, trim: true, default: "" },
     bio: { type: String, trim: true, default: "" },
     linkedinUrl: { type: String, trim: true, default: "" },
+    portfolioUrl: { type: String, trim: true, default: "" },
+    projects: { type: [String], default: [] },
+    education: { type: [String], default: [] },
+    certifications: { type: [String], default: [] },
+    workHistoryTimeline: { type: [String], default: [] },
     skills: [{ type: String, trim: true }],
     experience: { type: String, trim: true, default: "" },
     industryField: { type: String, trim: true, default: "" },
@@ -24,6 +92,8 @@ const companyProfileSchema = new Schema(
     companyName: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
     industry: { type: String, trim: true, default: "" },
+    website: { type: String, trim: true, default: "" },
+    proofDocuments: { type: [String], default: [] },
     linkedinUrl: { type: String, trim: true, default: "" },
     logo: { type: String, trim: true, default: "" },
     isVerified: { type: Boolean, default: false },
@@ -98,6 +168,66 @@ const userSchema = new Schema(
       type: moderationSchema,
       default: () => ({})
     },
+    companyAccess: {
+      type: companyAccessSchema,
+      default: () => ({})
+    },
+    notificationPreferences: {
+      type: notificationPreferencesSchema,
+      default: () => ({})
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false
+    },
+    emailVerificationTokenHash: {
+      type: String,
+      select: false,
+      default: ""
+    },
+    emailVerificationExpiresAt: {
+      type: Date,
+      select: false,
+      default: null
+    },
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+      default: ""
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      select: false,
+      default: null
+    },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false
+    },
+    twoFactorCodeHash: {
+      type: String,
+      select: false,
+      default: ""
+    },
+    twoFactorCodeExpiresAt: {
+      type: Date,
+      select: false,
+      default: null
+    },
+    twoFactorPendingTokenHash: {
+      type: String,
+      select: false,
+      default: ""
+    },
+    twoFactorPendingExpiresAt: {
+      type: Date,
+      select: false,
+      default: null
+    },
+    lastPasswordChangedAt: {
+      type: Date,
+      default: null
+    },
     jobListings: [
       {
         type: Schema.Types.ObjectId,
@@ -121,6 +251,8 @@ userSchema.pre("save", async function hashPassword(next) {
 userSchema.methods.comparePassword = async function comparePassword(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+userSchema.index({ userType: 1, "companyAccess.companyAccount": 1 });
 
 const User = mongoose.model("User", userSchema);
 

@@ -1,6 +1,21 @@
 const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 
-const hasAtLeastItems = (items, count) => Array.isArray(items) && items.filter(Boolean).length >= count;
+const hasAtLeastItems = (items, count) => {
+  if (Array.isArray(items)) {
+    return items.filter(Boolean).length >= count;
+  }
+
+  if (typeof items === "string") {
+    return (
+      items
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean).length >= count
+    );
+  }
+
+  return false;
+};
 
 const buildSeekerChecks = (seekerProfile, pendingFiles = {}) => [
   { key: "name", label: "Add your full name", done: isNonEmptyString(seekerProfile?.name) },
@@ -29,6 +44,26 @@ const buildSeekerChecks = (seekerProfile, pendingFiles = {}) => [
     key: "cvUrl",
     label: "Upload your CV",
     done: Boolean(pendingFiles.cv) || isNonEmptyString(seekerProfile?.cvUrl)
+  },
+  {
+    key: "linkedinUrl",
+    label: "Add your LinkedIn profile",
+    done: isNonEmptyString(seekerProfile?.linkedinUrl)
+  },
+  {
+    key: "portfolioUrl",
+    label: "Add your portfolio URL",
+    done: isNonEmptyString(seekerProfile?.portfolioUrl)
+  },
+  {
+    key: "projects",
+    label: "List at least one project",
+    done: hasAtLeastItems(seekerProfile?.projects, 1)
+  },
+  {
+    key: "workHistoryTimeline",
+    label: "Add work history timeline entries",
+    done: hasAtLeastItems(seekerProfile?.workHistoryTimeline, 1)
   }
 ];
 
@@ -57,6 +92,21 @@ const buildCompanyChecks = (companyProfile, jobsCount = 0, pendingFiles = {}) =>
     key: "jobsCount",
     label: "Publish at least one job listing",
     done: Number(jobsCount) > 0
+  },
+  {
+    key: "website",
+    label: "Add your company website",
+    done: isNonEmptyString(companyProfile?.website)
+  },
+  {
+    key: "linkedinUrl",
+    label: "Add your company LinkedIn page",
+    done: isNonEmptyString(companyProfile?.linkedinUrl)
+  },
+  {
+    key: "proofDocuments",
+    label: "Add at least one proof document",
+    done: hasAtLeastItems(companyProfile?.proofDocuments, 1)
   }
 ];
 

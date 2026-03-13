@@ -6,6 +6,7 @@ import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 import Report from "../models/Report.js";
 import User from "../models/User.js";
+import { notifyUser } from "../utils/notifications.js";
 
 const toPositiveInt = (value, fallback, maxValue = 100) => {
   const parsed = Number.parseInt(value, 10);
@@ -285,6 +286,19 @@ export const setUserSuspension = async (req, res) => {
         email: targetUser.email,
         reason: targetUser.suspensionReason || "",
         deactivatedJobCount
+      }
+    });
+
+    await notifyUser({
+      userId: targetUser._id,
+      type: "moderation_action",
+      title: suspended ? "Account Suspended" : "Account Restored",
+      message: suspended
+        ? `Your account has been suspended${targetUser.suspensionReason ? `: ${targetUser.suspensionReason}` : "."}`
+        : "Your account suspension has been lifted.",
+      metadata: {
+        action: suspended ? "suspend_user" : "unsuspend_user",
+        reason: targetUser.suspensionReason || ""
       }
     });
 
@@ -751,6 +765,24 @@ export const reviewAppeal = async (req, res) => {
       }
     });
 
+    const appealTargetUser = appeal.appellant || (await User.findOne({ email: appeal.email }).select("_id"))?._id;
+    if (appealTargetUser) {
+      await notifyUser({
+        userId: appealTargetUser,
+        type: "moderation_action",
+        title: "Appeal Reviewed",
+        message:
+          status === "approved"
+            ? "Your appeal was approved and your account access has been restored."
+            : "Your appeal was reviewed and declined.",
+        metadata: {
+          action: "appeal_review",
+          status,
+          appealId: String(appeal._id)
+        }
+      });
+    }
+
     return res.json({
       data: {
         id: String(appeal._id),
@@ -956,6 +988,20 @@ export const moderateMessage = async (req, res) => {
         reason: actionReason
       }
     });
+
+    if (message.sender?._id || message.sender) {
+      await notifyUser({
+        userId: message.sender?._id || message.sender,
+        type: "moderation_action",
+        title: "Message Moderation Action",
+        message: `A moderation action was applied to one of your messages: ${action.replaceAll("_", " ")}.`,
+        metadata: {
+          action,
+          reason: actionReason,
+          messageId: String(message._id)
+        }
+      });
+    }
 
     return res.json({
       data: {

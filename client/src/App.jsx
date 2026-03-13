@@ -9,6 +9,9 @@ import CareersPage from "./pages/CareersPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+import AcceptCompanyInvitePage from "./pages/AcceptCompanyInvitePage";
 import SeekerDashboard from "./pages/SeekerDashboard";
 
 const DashboardRedirect = () => {
@@ -39,6 +42,9 @@ const App = () => {
         <Route path="/careers" element={<CareersPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/accept-company-invite" element={<AcceptCompanyInvitePage />} />
         <Route
           path="/dashboard"
           element={

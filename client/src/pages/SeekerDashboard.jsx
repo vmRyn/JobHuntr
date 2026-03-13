@@ -4,10 +4,15 @@ import { io } from "socket.io-client";
 import api from "../api/client";
 import DashboardShell from "../components/DashboardShell";
 import ChatWindow from "../components/ChatWindow";
+import InterviewScheduler from "../components/InterviewScheduler";
 import JobCardContent from "../components/JobCardContent";
 import LoadingSpinner from "../components/LoadingSpinner";
 import MatchList from "../components/MatchList";
+import OfferWorkflowPanel from "../components/OfferWorkflowPanel";
 import ProfileStrengthCard from "../components/ProfileStrengthCard";
+import AccountSecurityPanel from "../components/AccountSecurityPanel";
+import NotificationCenterPanel from "../components/NotificationCenterPanel";
+import SupportCenterPanel from "../components/SupportCenterPanel";
 import SwipeCard from "../components/SwipeCard";
 import industryOptions from "../data/industryOptions";
 import jobIndustryOptions from "../data/jobIndustryOptions";
@@ -36,6 +41,19 @@ const createInitialProfile = (user) => ({
   name: user?.seekerProfile?.name || "",
   bio: user?.seekerProfile?.bio || "",
   linkedinUrl: user?.seekerProfile?.linkedinUrl || "",
+  portfolioUrl: user?.seekerProfile?.portfolioUrl || "",
+  projects: Array.isArray(user?.seekerProfile?.projects)
+    ? user.seekerProfile.projects.join("\n")
+    : "",
+  education: Array.isArray(user?.seekerProfile?.education)
+    ? user.seekerProfile.education.join("\n")
+    : "",
+  certifications: Array.isArray(user?.seekerProfile?.certifications)
+    ? user.seekerProfile.certifications.join("\n")
+    : "",
+  workHistoryTimeline: Array.isArray(user?.seekerProfile?.workHistoryTimeline)
+    ? user.seekerProfile.workHistoryTimeline.join("\n")
+    : "",
   skills: user?.seekerProfile?.skills || [],
   industryField: user?.seekerProfile?.industryField || user?.seekerProfile?.experience || "",
   location: user?.seekerProfile?.location || "",
@@ -58,20 +76,6 @@ const unitOptions = [
 ];
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
-
-const toLocalDisplay = (value) => {
-  if (!value) return "";
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toLocaleString([], {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
-};
 
 const getErrorMessage = (requestError, fallback) =>
   requestError?.response?.data?.message || fallback;
@@ -113,8 +117,6 @@ const SeekerDashboard = () => {
   const [discoveryFilters, setDiscoveryFilters] = useState(defaultDiscoveryFilters);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [debouncedPostcode, setDebouncedPostcode] = useState(defaultDiscoveryFilters.postcode);
-  const [interviewNotifications, setInterviewNotifications] = useState([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isActionPending, setIsActionPending] = useState(false);
   const [submittingJobReport, setSubmittingJobReport] = useState(false);
@@ -403,63 +405,17 @@ const SeekerDashboard = () => {
     }
   };
 
-  const loadInterviewNotifications = async () => {
-    setLoadingNotifications(true);
-
+  const loadUnreadNotificationCount = async () => {
     try {
       const { data } = await api.get("/notifications", {
         params: {
-          type: "interview_scheduled",
-          limit: 25
+          limit: 1
         }
       });
 
-      setInterviewNotifications(data.notifications || []);
       setUnreadNotificationCount(data.unreadCount || 0);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to load notifications");
-    } finally {
-      setLoadingNotifications(false);
-    }
-  };
-
-  const handleMarkNotificationRead = async (notificationId) => {
-    if (!notificationId) {
-      return;
-    }
-
-    try {
-      const { data } = await api.patch(`/notifications/${notificationId}/read`);
-
-      setInterviewNotifications((prev) =>
-        prev.map((notification) =>
-          notification._id === notificationId
-            ? { ...notification, isRead: true }
-            : notification
-        )
-      );
-      setUnreadNotificationCount((prev) =>
-        typeof data.unreadCount === "number" ? data.unreadCount : Math.max(prev - 1, 0)
-      );
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to update notification");
-    }
-  };
-
-  const handleMarkAllNotificationsRead = async () => {
-    if (!unreadNotificationCount) {
-      return;
-    }
-
-    try {
-      await api.patch("/notifications/read-all");
-
-      setInterviewNotifications((prev) =>
-        prev.map((notification) => ({ ...notification, isRead: true }))
-      );
-      setUnreadNotificationCount(0);
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Failed to update notifications");
+      setError(requestError.response?.data?.message || "Failed to load notification summary");
     }
   };
 
@@ -468,16 +424,14 @@ const SeekerDashboard = () => {
       setSavedJobs([]);
       setMatches([]);
       setSelectedMatch(null);
-      setInterviewNotifications([]);
       setUnreadNotificationCount(0);
-      setLoadingNotifications(false);
       setLoadingSavedJobs(false);
       return;
     }
 
     loadSavedJobs();
     loadMatches();
-    loadInterviewNotifications();
+    loadUnreadNotificationCount();
   }, [profileLocked]);
 
   useEffect(() => {
@@ -500,11 +454,10 @@ const SeekerDashboard = () => {
     const onNotificationCreated = (payload) => {
       const incomingNotification = payload?.notification;
 
-      if (!incomingNotification || incomingNotification.type !== "interview_scheduled") {
+      if (!incomingNotification) {
         return;
       }
 
-      setInterviewNotifications((prev) => [incomingNotification, ...prev.filter((item) => item._id !== incomingNotification._id)].slice(0, 25));
       setUnreadNotificationCount((prev) => {
         if (typeof payload?.unreadCount === "number") {
           return payload.unreadCount;
@@ -512,7 +465,7 @@ const SeekerDashboard = () => {
 
         return prev + 1;
       });
-      setNotice(incomingNotification.message || "New interview scheduled.");
+      setNotice(incomingNotification.message || "New notification received.");
     };
 
     socket.on("notificationCreated", onNotificationCreated);
@@ -620,6 +573,11 @@ const SeekerDashboard = () => {
       formData.append("industryField", profileForm.industryField);
       formData.append("location", profileForm.location);
       formData.append("linkedinUrl", profileForm.linkedinUrl);
+      formData.append("portfolioUrl", profileForm.portfolioUrl);
+      formData.append("projects", profileForm.projects);
+      formData.append("education", profileForm.education);
+      formData.append("certifications", profileForm.certifications);
+      formData.append("workHistoryTimeline", profileForm.workHistoryTimeline);
 
       if (profileFiles.profilePicture) {
         formData.append("profilePicture", profileFiles.profilePicture);
@@ -1111,64 +1069,20 @@ const SeekerDashboard = () => {
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Interview updates</p>
-            <h2 className="font-display text-xl text-slate-50">Company scheduling notifications</h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Notification summary</p>
+            <h2 className="font-display text-xl text-slate-50">Unread updates across matches</h2>
           </div>
           <div className="flex items-center gap-2">
             <span className="chip chip-accent">{unreadNotificationCount} unread</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={!unreadNotificationCount}
-              onClick={handleMarkAllNotificationsRead}
-            >
-              Mark all read
+            <Button type="button" variant="ghost" size="sm" onClick={() => handleTabChange("profile")}>
+              Open center
             </Button>
           </div>
         </div>
 
-        {loadingNotifications && <LoadingSpinner label="Loading interview notifications" />}
-
-        {!loadingNotifications && !interviewNotifications.length && (
-          <div className="empty-state">No interview notifications yet.</div>
-        )}
-
-        {!loadingNotifications && interviewNotifications.length > 0 && (
-          <div className="space-y-2">
-            {interviewNotifications.map((notification) => (
-              <div
-                key={notification._id}
-                className={`surface-subtle p-3 ${notification.isRead ? "opacity-85" : "ring-1 ring-brandStrong/35"}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-100">{notification.title}</p>
-                    <p className="text-xs text-slate-300">{notification.message}</p>
-                    <p className="text-xs text-slate-300">
-                      {notification.companyName || "Company"} • {notification.jobTitle || "Role"}
-                    </p>
-                    <p className="text-xs text-slate-300">
-                      {toLocalDisplay(notification.interviewAt)}
-                      {notification.location ? ` • ${notification.location}` : ""}
-                    </p>
-                  </div>
-
-                  {!notification.isRead && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleMarkNotificationRead(notification._id)}
-                    >
-                      Mark read
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <p className="text-sm text-slate-300">
+          Notifications include interview changes, offers, messages, support replies, and moderation updates.
+        </p>
       </Card>
 
       <Card className="space-y-4">
@@ -1194,6 +1108,21 @@ const SeekerDashboard = () => {
           userType={user.userType}
         />
       </Card>
+
+      <InterviewScheduler
+        selectedMatch={selectedMatch}
+        onNotice={setNotice}
+        onError={setError}
+        canSchedule={false}
+        allowAttachToConversation={false}
+      />
+
+      <OfferWorkflowPanel
+        selectedMatch={selectedMatch}
+        currentUser={user}
+        onNotice={setNotice}
+        onError={setError}
+      />
     </div>
   );
 
@@ -1216,99 +1145,155 @@ const SeekerDashboard = () => {
   );
 
   const renderProfile = () => (
-    <Card className="space-y-5">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
-        <h2 className="font-display text-2xl text-slate-50">Your candidate card</h2>
-      </div>
+    <div className="space-y-3">
+      <Card className="space-y-5">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Profile</p>
+          <h2 className="font-display text-2xl text-slate-50">Your candidate card</h2>
+        </div>
 
-      <ProfileStrengthCard
-        userType={user.userType}
-        seekerProfile={profileForm}
-        pendingFiles={{
-          profilePicture: profileFiles.profilePicture,
-          cv: profileFiles.cv
-        }}
+        <ProfileStrengthCard
+          userType={user.userType}
+          seekerProfile={profileForm}
+          pendingFiles={{
+            profilePicture: profileFiles.profilePicture,
+            cv: profileFiles.cv
+          }}
+        />
+
+        <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
+          <InputField
+            label="Name"
+            name="name"
+            value={profileForm.name}
+            onChange={handleProfileChange}
+            placeholder="Your full name"
+            required
+          />
+          <AutocompleteField
+            label="Location"
+            name="location"
+            value={profileForm.location}
+            onChange={handleProfileChange}
+            placeholder="Remote or city"
+            suggestions={locationSuggestions}
+            minQueryLength={2}
+          />
+          <AutocompleteField
+            label="Industry / Field"
+            name="industryField"
+            value={profileForm.industryField}
+            onChange={handleProfileChange}
+            placeholder="Software Engineering"
+            suggestions={industryOptions}
+          />
+          <InputField
+            label="LinkedIn profile"
+            type="url"
+            name="linkedinUrl"
+            value={profileForm.linkedinUrl}
+            onChange={handleProfileChange}
+            placeholder="https://www.linkedin.com/in/your-name"
+          />
+          <InputField
+            label="Portfolio URL"
+            type="url"
+            name="portfolioUrl"
+            value={profileForm.portfolioUrl}
+            onChange={handleProfileChange}
+            placeholder="https://yourportfolio.com"
+          />
+          <SkillsInput
+            label="Skills"
+            value={profileForm.skills}
+            skills={profileForm.skills}
+            onChange={handleSkillsChange}
+            placeholder="React, Product, Node"
+          />
+          <FileUploadField
+            className="md:col-span-2"
+            label="Profile picture"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            buttonLabel="Profile picture"
+            helpText="Upload JPG, PNG, WEBP, or GIF"
+            file={profileFiles.profilePicture}
+            onFileChange={(file) => handleProfileFileChange("profilePicture", file)}
+            existingUrl={profileForm.profilePicture}
+            imagePreview
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Bio"
+            name="bio"
+            value={profileForm.bio}
+            onChange={handleProfileChange}
+            placeholder="What should companies know about you?"
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Projects (one per line)"
+            name="projects"
+            value={profileForm.projects}
+            onChange={handleProfileChange}
+            placeholder="Project name - summary"
+            rows={5}
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Education (one per line)"
+            name="education"
+            value={profileForm.education}
+            onChange={handleProfileChange}
+            placeholder="Degree - School - Year"
+            rows={4}
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Certifications (one per line)"
+            name="certifications"
+            value={profileForm.certifications}
+            onChange={handleProfileChange}
+            placeholder="Certification - Issuer"
+            rows={4}
+          />
+          <InputField
+            className="md:col-span-2"
+            as="textarea"
+            label="Work history timeline (one per line)"
+            name="workHistoryTimeline"
+            value={profileForm.workHistoryTimeline}
+            onChange={handleProfileChange}
+            placeholder="2022-2024: Senior Engineer at Company"
+            rows={5}
+          />
+          <FileUploadField
+            className="md:col-span-2"
+            label="CV / Resume"
+            accept="application/pdf,.doc,.docx"
+            buttonLabel="Resume"
+            helpText="Upload PDF, DOC, or DOCX up to 10MB"
+            file={profileFiles.cv}
+            onFileChange={(file) => handleProfileFileChange("cv", file)}
+            existingUrl={profileForm.cvUrl}
+            existingLabel={profileForm.cvOriginalName}
+          />
+
+          <Button className="md:col-span-2" type="submit" disabled={savingProfile}>
+            {savingProfile ? "Saving..." : "Save profile"}
+          </Button>
+        </form>
+      </Card>
+
+      <NotificationCenterPanel
+        disabledReason={profileLocked ? "Complete your profile to access notifications and preferences." : ""}
       />
-
-      <form onSubmit={handleSaveProfile} className="grid gap-3 md:grid-cols-2">
-        <InputField
-          label="Name"
-          name="name"
-          value={profileForm.name}
-          onChange={handleProfileChange}
-          placeholder="Your full name"
-          required
-        />
-        <AutocompleteField
-          label="Location"
-          name="location"
-          value={profileForm.location}
-          onChange={handleProfileChange}
-          placeholder="Remote or city"
-          suggestions={locationSuggestions}
-          minQueryLength={2}
-        />
-        <AutocompleteField
-          label="Industry / Field"
-          name="industryField"
-          value={profileForm.industryField}
-          onChange={handleProfileChange}
-          placeholder="Software Engineering"
-          suggestions={industryOptions}
-        />
-        <InputField
-          label="LinkedIn profile"
-          type="url"
-          name="linkedinUrl"
-          value={profileForm.linkedinUrl}
-          onChange={handleProfileChange}
-          placeholder="https://www.linkedin.com/in/your-name"
-        />
-        <SkillsInput
-          label="Skills"
-          value={profileForm.skills}
-          skills={profileForm.skills}
-          onChange={handleSkillsChange}
-          placeholder="React, Product, Node"
-        />
-        <FileUploadField
-          className="md:col-span-2"
-          label="Profile picture"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          buttonLabel="Profile picture"
-          helpText="Upload JPG, PNG, WEBP, or GIF"
-          file={profileFiles.profilePicture}
-          onFileChange={(file) => handleProfileFileChange("profilePicture", file)}
-          existingUrl={profileForm.profilePicture}
-          imagePreview
-        />
-        <InputField
-          className="md:col-span-2"
-          as="textarea"
-          label="Bio"
-          name="bio"
-          value={profileForm.bio}
-          onChange={handleProfileChange}
-          placeholder="What should companies know about you?"
-        />
-        <FileUploadField
-          className="md:col-span-2"
-          label="CV / Resume"
-          accept="application/pdf,.doc,.docx"
-          buttonLabel="Resume"
-          helpText="Upload PDF, DOC, or DOCX up to 10MB"
-          file={profileFiles.cv}
-          onFileChange={(file) => handleProfileFileChange("cv", file)}
-          existingUrl={profileForm.cvUrl}
-          existingLabel={profileForm.cvOriginalName}
-        />
-
-        <Button className="md:col-span-2" type="submit" disabled={savingProfile}>
-          {savingProfile ? "Saving..." : "Save profile"}
-        </Button>
-      </form>
-    </Card>
+      <AccountSecurityPanel user={user} />
+      <SupportCenterPanel />
+    </div>
   );
 
   const contentByTab = {

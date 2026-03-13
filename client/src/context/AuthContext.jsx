@@ -8,6 +8,29 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const applyAuthPayload = (payload) => {
+    if (!payload?.token || !payload?.user) {
+      throw new Error("Invalid authentication payload");
+    }
+
+    localStorage.setItem("jobhuntr_token", payload.token);
+    setToken(payload.token);
+    setUser(payload.user);
+
+    return payload.user;
+  };
+
+  const refreshUser = async () => {
+    if (!localStorage.getItem("jobhuntr_token")) {
+      setUser(null);
+      return null;
+    }
+
+    const { data } = await api.get("/auth/me");
+    setUser(data);
+    return data;
+  };
+
   useEffect(() => {
     const hydrateAuth = async () => {
       if (!token) {
@@ -16,8 +39,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        const { data } = await api.get("/auth/me");
-        setUser(data);
+        await refreshUser();
       } catch (error) {
         localStorage.removeItem("jobhuntr_token");
         setToken(null);
@@ -32,18 +54,46 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (payload) => {
     const { data } = await api.post("/auth/login", payload);
-    localStorage.setItem("jobhuntr_token", data.token);
-    setToken(data.token);
-    setUser(data.user);
-    return data.user;
+
+    if (data?.requiresTwoFactor) {
+      return {
+        requiresTwoFactor: true,
+        pendingToken: data.twoFactorPendingToken,
+        previewCode: data.twoFactorPreviewCode || ""
+      };
+    }
+
+    const authenticatedUser = applyAuthPayload(data);
+    return {
+      requiresTwoFactor: false,
+      user: authenticatedUser
+    };
+  };
+
+  const completeTwoFactorLogin = async ({ pendingToken, code }) => {
+    const { data } = await api.post("/auth/login/2fa", {
+      pendingToken,
+      code
+    });
+
+    const authenticatedUser = applyAuthPayload(data);
+    return authenticatedUser;
   };
 
   const register = async (payload) => {
     const { data } = await api.post("/auth/register", payload);
-    localStorage.setItem("jobhuntr_token", data.token);
-    setToken(data.token);
-    setUser(data.user);
-    return data.user;
+
+    const authenticatedUser = applyAuthPayload(data);
+    return {
+      user: authenticatedUser,
+      emailVerificationRequired: Boolean(data.emailVerificationRequired),
+      emailVerificationPreviewToken: data.emailVerificationPreviewToken || ""
+    };
+  };
+
+  const setAuthFromPayload = (payload) => {
+    const authenticatedUser = applyAuthPayload(payload);
+    return authenticatedUser;
   };
 
   const logout = () => {
@@ -59,8 +109,11 @@ export const AuthProvider = ({ children }) => {
       loading,
       isAuthenticated: Boolean(user),
       setUser,
+      refreshUser,
       login,
+      completeTwoFactorLogin,
       register,
+      setAuthFromPayload,
       logout
     }),
     [token, user, loading]
